@@ -1,0 +1,6 @@
+{
+  "name": "Kalise - Adult Emotional Wellness & AI Companion",
+  "description": "A calm, private mobile-first PWA for mood tracking, guided journaling, daily affirmations, and empathetic AI companionship.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
