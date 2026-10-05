@@ -18,7 +18,7 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { MoodEntry, MoodLevel, EnergyLevel, SleepQuality } from '../types';
+import { MoodEntry, MoodLevel, EnergyLevel, SleepQuality, RestedLevel } from '../types';
 import {
   generatePatternInsights,
   buildClinicianSummary,
@@ -111,6 +111,18 @@ const SLEEP_QUALITY_OPTIONS: Array<{
   { quality: 'very-good', label: 'Very Good' },
 ];
 
+const RESTED_OPTIONS: Array<{
+  level: RestedLevel;
+  score: number;
+  label: string;
+}> = [
+  { level: 'very-unrested', score: 1, label: 'Very Unrested' },
+  { level: 'unrested', score: 2, label: 'Unrested' },
+  { level: 'okay', score: 3, label: 'Okay' },
+  { level: 'rested', score: 4, label: 'Rested' },
+  { level: 'very-rested', score: 5, label: 'Very Rested' },
+];
+
 const EMOTION_TAGS = [
   'Overwhelmed',
   'Anxious',
@@ -167,6 +179,7 @@ export const MoodTracker: React.FC<Props> = ({ moods, onSaveMood, onDeleteMood }
   const [selectedEnergy, setSelectedEnergy] = useState<EnergyLevel | undefined>(undefined);
   const [selectedSleepQuality, setSelectedSleepQuality] = useState<SleepQuality | undefined>(undefined);
   const [sleepHours, setSleepHours] = useState<string>('');
+  const [selectedRestedLevel, setSelectedRestedLevel] = useState<RestedLevel | undefined>(undefined);
   const [selectedObservations, setSelectedObservations] = useState<string[]>([]);
   const [note, setNote] = useState('');
   const [justSaved, setJustSaved] = useState(false);
@@ -204,6 +217,7 @@ export const MoodTracker: React.FC<Props> = ({ moods, onSaveMood, onDeleteMood }
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const energyOpt = ENERGY_OPTIONS.find((o) => o.level === selectedEnergy);
+    const restedOpt = RESTED_OPTIONS.find((o) => o.level === selectedRestedLevel);
     const parsedSleepHours = sleepHours.trim() ? parseFloat(sleepHours) : undefined;
 
     onSaveMood({
@@ -216,6 +230,8 @@ export const MoodTracker: React.FC<Props> = ({ moods, onSaveMood, onDeleteMood }
       energyScore: energyOpt?.score,
       sleepQuality: selectedSleepQuality,
       sleepHours: Number.isNaN(parsedSleepHours) ? undefined : parsedSleepHours,
+      restedLevel: selectedRestedLevel,
+      restedScore: restedOpt?.score,
       thoughtBehaviors: selectedObservations.length > 0 ? selectedObservations : undefined,
       note: note.trim() || undefined,
     });
@@ -226,6 +242,7 @@ export const MoodTracker: React.FC<Props> = ({ moods, onSaveMood, onDeleteMood }
     setSelectedInfluences([]);
     setSelectedEnergy(undefined);
     setSelectedSleepQuality(undefined);
+    setSelectedRestedLevel(undefined);
     setSleepHours('');
     setSelectedObservations([]);
 
@@ -531,7 +548,7 @@ export const MoodTracker: React.FC<Props> = ({ moods, onSaveMood, onDeleteMood }
 
             {/* Hours slept input */}
             <div className="flex items-center justify-between pt-1 text-xs">
-              <span className="text-slate-300">Hours slept (approximate):</span>
+              <span className="text-slate-300">Hours slept (duration):</span>
               <div className="flex items-center gap-1.5">
                 <input
                   type="number"
@@ -544,6 +561,34 @@ export const MoodTracker: React.FC<Props> = ({ moods, onSaveMood, onDeleteMood }
                   className="w-20 px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-right text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-teal-500/60"
                 />
                 <span className="text-slate-400 text-xs">hrs</span>
+              </div>
+            </div>
+
+            {/* How rested do you feel? (Distinguishing restfulness from sleep duration) */}
+            <div className="pt-2.5 border-t border-slate-800/80 space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-300 font-medium">How rested do you feel?</span>
+                <span className="text-[10px] text-slate-500">Perceived restfulness</span>
+              </div>
+              <div className="grid grid-cols-5 gap-1.5 pt-0.5">
+                {RESTED_OPTIONS.map((opt) => {
+                  const isSelected = selectedRestedLevel === opt.level;
+                  return (
+                    <button
+                      key={opt.level}
+                      type="button"
+                      onClick={() => setSelectedRestedLevel(isSelected ? undefined : opt.level)}
+                      className={`py-2 px-1 rounded-xl text-xs font-medium text-center transition cursor-pointer ${
+                        isSelected
+                          ? 'bg-teal-500/20 text-teal-300 border border-teal-500/50 shadow-md font-bold'
+                          : 'bg-slate-800/60 text-slate-400 border border-slate-700/60 hover:text-slate-200'
+                      }`}
+                    >
+                      <div className="text-xs font-bold">{opt.score}</div>
+                      <div className="text-[10px] truncate mt-0.5">{opt.label}</div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -989,6 +1034,17 @@ export const MoodTracker: React.FC<Props> = ({ moods, onSaveMood, onDeleteMood }
                               Sleep:{' '}
                               <strong className="capitalize text-sky-300">
                                 {entry.sleepQuality || ''} {entry.sleepHours ? `(${entry.sleepHours}h)` : ''}
+                              </strong>
+                            </span>
+                          </span>
+                        )}
+                        {entry.restedLevel && (
+                          <span className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-slate-800 border border-slate-700 text-slate-300">
+                            <Sparkles className="w-3 h-3 text-teal-400" />
+                            <span>
+                              Rested:{' '}
+                              <strong className="capitalize text-teal-300">
+                                {entry.restedLevel.replace('-', ' ')}
                               </strong>
                             </span>
                           </span>

@@ -4,8 +4,13 @@ export type EnergyLevel = 'very-low' | 'low' | 'typical' | 'high' | 'very-high';
 
 export type SleepQuality = 'very-poor' | 'poor' | 'okay' | 'good' | 'very-good';
 
+export type RestedLevel = 'very-unrested' | 'unrested' | 'okay' | 'rested' | 'very-rested';
+
+export type ThemeMode = 'dark' | 'light' | 'system';
+
 export interface MoodEntry {
   id: string;
+  userId?: string;
   level: MoodLevel;
   score: number; // 1 to 5
   label: string;
@@ -15,7 +20,9 @@ export interface MoodEntry {
   energyLevel?: EnergyLevel;
   energyScore?: number; // 1 to 5
   sleepQuality?: SleepQuality;
-  sleepHours?: number;
+  sleepHours?: number; // Duration of sleep in hours
+  restedLevel?: RestedLevel; // How rested user feels (separate from hours)
+  restedScore?: number; // 1 to 5
   thoughtBehaviors?: string[];
   note?: string;
   timestamp: string; // ISO date string
@@ -90,13 +97,37 @@ export interface MedicationLog {
 }
 
 export interface UserSettings {
+  userId?: string;
   userName: string;
+  email?: string;
   dailyCheckInEnabled: boolean;
   dailyCheckInTime: string; // e.g. "20:00"
   lastCheckInDate?: string;
   isPremium: boolean;
-  theme: 'dark' | 'slate';
+  theme: ThemeMode;
   freeMessagesUsed: number;
   medicationRemindersEnabled?: boolean;
   notificationPermission?: 'default' | 'granted' | 'denied';
+  onboardingCompleted?: boolean;
+  onboardingGoals?: string[];
+}
+
+export interface UserProfile {
+  id: string; // auth.users id
+  preferredName: string;
+  email?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UserPreferences {
+  userId: string;
+  theme: ThemeMode;
+  onboardingCompleted: boolean;
+  onboardingGoals: string[];
+  notificationPreference: 'default' | 'granted' | 'denied';
+  medicationReminderEnabled: boolean;
+  chatReminderEnabled: boolean;
+  chatReminderTime: string;
+  updatedAt: string;
 }

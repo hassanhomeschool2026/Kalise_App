@@ -1,4 +1,4 @@
-import { MoodEntry, MoodLevel, EnergyLevel, SleepQuality } from '../types';
+import { MoodEntry, MoodLevel, EnergyLevel, SleepQuality, RestedLevel } from '../types';
 
 export interface PatternInsight {
   id: string;
@@ -19,6 +19,8 @@ export interface ClinicianSummaryData {
   energyDistribution: Record<EnergyLevel, number>;
   averageSleepHours: number | null;
   sleepQualityDistribution: Record<SleepQuality, number>;
+  averageRestedScore: number | null;
+  restedDistribution: Record<RestedLevel, number>;
   topEmotions: Array<{ name: string; count: number; percentage: number }>;
   topInfluences: Array<{ name: string; count: number; percentage: number }>;
   topObservations: Array<{ name: string; count: number; percentage: number }>;
@@ -28,10 +30,19 @@ export interface ClinicianSummaryData {
 /**
  * Derives neutral, non-diagnostic observational insights strictly from the user's logged data.
  * Adheres to safety instructions: never diagnoses, never labels mania, bipolar, or depression.
+ * Avoids premature conclusions and explicitly distinguishes sleep duration from perceived restfulness.
  */
 export function generatePatternInsights(entries: MoodEntry[]): PatternInsight[] {
   if (entries.length < 3) {
-    return [];
+    return [
+      {
+        id: 'insight-building-data',
+        type: 'general',
+        title: 'Building Your History',
+        description: "You're still building your history. Keep checking in and Kalise can help you notice patterns over time.",
+        supportingDetail: 'Insights become more reliable and helpful after logging several check-ins across different days.',
+      },
+    ];
   }
 
   const insights: PatternInsight[] = [];
@@ -59,35 +70,67 @@ export function generatePatternInsights(entries: MoodEntry[]): PatternInsight[] 
     }
   }
 
-  // 2. Sleep and Mood Relationship
-  const entriesWithSleep = entries.filter((e) => e.sleepQuality);
-  if (entriesWithSleep.length >= 3) {
-    const poorSleepEntries = entriesWithSleep.filter(
-      (e) => e.sleepQuality === 'poor' || e.sleepQuality === 'very-poor'
-    );
-    const goodSleepEntries = entriesWithSleep.filter(
-      (e) => e.sleepQuality === 'good' || e.sleepQuality === 'very-good'
+  // 2. Distinction: Sleep Duration vs Perceived Restfulness
+  const entriesWithSleepAndRest = entries.filter(
+    (e) => e.sleepHours !== undefined && (e.restedLevel || e.restedScore)
+  );
+
+  if (entriesWithSleepAndRest.length >= 3) {
+    // Days with longer sleep (>= 7 hrs) but low perceived restfulness
+    const longSleepLowRest = entriesWithSleepAndRest.filter(
+      (e) =>
+        (e.sleepHours || 0) >= 7 &&
+        (e.restedLevel === 'unrested' ||
+          e.restedLevel === 'very-unrested' ||
+          (e.restedScore && e.restedScore <= 2))
     );
 
-    if (poorSleepEntries.length >= 2 && goodSleepEntries.length >= 1) {
-      const avgPoorMood =
-        poorSleepEntries.reduce((acc, curr) => acc + curr.score, 0) / poorSleepEntries.length;
-      const avgGoodMood =
-        goodSleepEntries.reduce((acc, curr) => acc + curr.score, 0) / goodSleepEntries.length;
+    if (longSleepLowRest.length >= 2) {
+      insights.push({
+        id: 'insight-duration-vs-rest',
+        type: 'sleep',
+        title: 'Sleep Duration & Perceived Restfulness',
+        description: "Your recent entries show lower restfulness on some days despite longer sleep hours.",
+        supportingDetail: "Hours slept and how physically or mentally rested you feel do not always align. Stress, sleep quality, and daily routines can influence your morning recovery.",
+      });
+    }
+  }
 
-      if (avgGoodMood > avgPoorMood + 0.4) {
+  // 3. Sleep Restfulness and Mood Observation
+  const entriesWithRest = entries.filter((e) => e.restedScore !== undefined || e.restedLevel);
+  if (entriesWithRest.length >= 3) {
+    const lowRestEntries = entriesWithRest.filter(
+      (e) =>
+        e.restedLevel === 'very-unrested' ||
+        e.restedLevel === 'unrested' ||
+        (e.restedScore && e.restedScore <= 2)
+    );
+    const highRestEntries = entriesWithRest.filter(
+      (e) =>
+        e.restedLevel === 'rested' ||
+        e.restedLevel === 'very-rested' ||
+        (e.restedScore && e.restedScore >= 4)
+    );
+
+    if (lowRestEntries.length >= 2 && highRestEntries.length >= 1) {
+      const avgLowRestMood =
+        lowRestEntries.reduce((acc, curr) => acc + curr.score, 0) / lowRestEntries.length;
+      const avgHighRestMood =
+        highRestEntries.reduce((acc, curr) => acc + curr.score, 0) / highRestEntries.length;
+
+      if (avgHighRestMood > avgLowRestMood + 0.4) {
         insights.push({
-          id: 'insight-sleep-mood',
+          id: 'insight-rest-mood-relation',
           type: 'sleep',
-          title: 'Sleep and Mood Relationship',
-          description: "You have logged lower moods more often on days when you reported poor sleep.",
-          supportingDetail: `Average mood was ${avgPoorMood.toFixed(1)}/5 after poor sleep compared to ${avgGoodMood.toFixed(1)}/5 after restful sleep.`,
+          title: 'Restfulness and Daily Mood',
+          description: "Your recent entries show lower restfulness on some days when your mood was lower.",
+          supportingDetail: `Average mood was ${avgLowRestMood.toFixed(1)}/5 on days feeling unrested compared to ${avgHighRestMood.toFixed(1)}/5 when waking up rested.`,
         });
       }
     }
   }
 
-  // 3. Energy and Restlessness Observation
+  // 4. Energy and Restlessness Observation (Neutral, strictly non-diagnostic)
   const highEnergyRestless = entries.filter(
     (e) =>
       (e.energyLevel === 'high' || e.energyLevel === 'very-high') &&
@@ -96,32 +139,13 @@ export function generatePatternInsights(entries: MoodEntry[]): PatternInsight[] 
         (e.thoughtBehaviors && e.thoughtBehaviors.includes('Racing thoughts')))
   );
 
-  if (highEnergyRestless.length >= 2) {
+  if (highEnergyRestless.length >= 3) {
     insights.push({
       id: 'insight-energy-restless',
       type: 'energy',
       title: 'Energy and Cognitive Rhythm',
-      description: "High energy and restlessness have appeared together several times recently.",
-      supportingDetail: "Your entries show several days of higher-than-usual energy alongside racing thoughts or physical restlessness. This may be something worth discussing with your healthcare provider.",
-    });
-  }
-
-  // 4. Low Sleep alongside High Energy
-  const lowSleepHighEnergy = entries.filter(
-    (e) =>
-      (e.energyLevel === 'high' || e.energyLevel === 'very-high') &&
-      ((e.sleepHours !== undefined && e.sleepHours <= 5) ||
-        e.sleepQuality === 'poor' ||
-        e.sleepQuality === 'very-poor')
-  );
-
-  if (lowSleepHighEnergy.length >= 2) {
-    insights.push({
-      id: 'insight-sleep-high-energy',
-      type: 'general',
-      title: 'Sleep and Energy Patterns',
-      description: "You have logged less sleep alongside higher energy several times recently.",
-      supportingDetail: "Observing periods where reduced sleep coincides with sustained high energy can be helpful background information to share with your clinician.",
+      description: "You've logged higher energy and restlessness together several times recently.",
+      supportingDetail: "Observing this combination without judgment can help you notice what helps you channel physical or mental energy constructively.",
     });
   }
 
@@ -147,7 +171,7 @@ export function generatePatternInsights(entries: MoodEntry[]): PatternInsight[] 
     }
   }
 
-  // 6. Good Mood + Low Energy or Low Mood + High Energy Nuance
+  // 6. Good Mood + Low Energy
   const goodMoodLowEnergy = entries.filter(
     (e) => (e.score === 4 || e.score === 5) && (e.energyLevel === 'low' || e.energyLevel === 'very-low')
   );
@@ -184,6 +208,8 @@ export function buildClinicianSummary(
       energyDistribution: { 'very-low': 0, low: 0, typical: 0, high: 0, 'very-high': 0 },
       averageSleepHours: null,
       sleepQualityDistribution: { 'very-poor': 0, poor: 0, okay: 0, good: 0, 'very-good': 0 },
+      averageRestedScore: null,
+      restedDistribution: { 'very-unrested': 0, unrested: 0, okay: 0, rested: 0, 'very-rested': 0 },
       topEmotions: [],
       topInfluences: [],
       topObservations: [],
@@ -262,29 +288,97 @@ export function buildClinicianSummary(
     }
   });
 
-  // Counts for emotions, influences, observations
-  const countItems = (extractor: (e: MoodEntry) => string[] | undefined) => {
-    const map: Record<string, number> = {};
-    entries.forEach((e) => {
-      const items = extractor(e) || [];
-      items.forEach((item) => {
-        map[item] = (map[item] || 0) + 1;
-      });
-    });
-    return Object.entries(map)
-      .map(([name, count]) => ({
-        name,
-        count,
-        percentage: Math.round((count / total) * 100),
-      }))
-      .sort((a, b) => b.count - a.count);
+  // Rested score & distribution
+  const restedEntries = entries.filter((e) => e.restedScore !== undefined || e.restedLevel);
+  const averageRestedScore =
+    restedEntries.length > 0
+      ? Number(
+          (
+            restedEntries.reduce((acc, e) => acc + (e.restedScore || 3), 0) / restedEntries.length
+          ).toFixed(1)
+        )
+      : null;
+
+  const restedDistribution: Record<RestedLevel, number> = {
+    'very-unrested': 0,
+    unrested: 0,
+    okay: 0,
+    rested: 0,
+    'very-rested': 0,
   };
+  entries.forEach((e) => {
+    if (e.restedLevel) {
+      restedDistribution[e.restedLevel] = (restedDistribution[e.restedLevel] || 0) + 1;
+    }
+  });
 
-  const topEmotions = countItems((e) => e.emotions).slice(0, 6);
-  const topInfluences = countItems((e) => e.influences).slice(0, 6);
-  const topObservations = countItems((e) => e.thoughtBehaviors).slice(0, 6);
+  // Top emotions
+  const emotionMap: Record<string, number> = {};
+  entries.forEach((e) => {
+    e.emotions.forEach((em) => {
+      emotionMap[em] = (emotionMap[em] || 0) + 1;
+    });
+  });
+  const topEmotions = Object.entries(emotionMap)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([name, count]) => ({
+      name,
+      count,
+      percentage: Math.round((count / total) * 100),
+    }));
 
-  const keyPatterns = generatePatternInsights(entries).map((i) => i.description);
+  // Top influences
+  const influenceMap: Record<string, number> = {};
+  entries.forEach((e) => {
+    e.influences.forEach((inf) => {
+      influenceMap[inf] = (influenceMap[inf] || 0) + 1;
+    });
+  });
+  const topInfluences = Object.entries(influenceMap)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([name, count]) => ({
+      name,
+      count,
+      percentage: Math.round((count / total) * 100),
+    }));
+
+  // Top thoughts / observations
+  const obsMap: Record<string, number> = {};
+  entries.forEach((e) => {
+    if (e.thoughtBehaviors) {
+      e.thoughtBehaviors.forEach((ob) => {
+        obsMap[ob] = (obsMap[ob] || 0) + 1;
+      });
+    }
+  });
+  const topObservations = Object.entries(obsMap)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([name, count]) => ({
+      name,
+      count,
+      percentage: Math.round((count / total) * 100),
+    }));
+
+  // Observational key patterns
+  const keyPatterns: string[] = [];
+  if (topEmotions.length > 0) {
+    keyPatterns.push(
+      `Most reported emotional states: ${topEmotions.map((e) => `${e.name} (${e.percentage}%)`).join(', ')}`
+    );
+  }
+  if (averageSleepHours !== null && averageRestedScore !== null) {
+    keyPatterns.push(
+      `Average recorded sleep duration: ${averageSleepHours} hours; perceived restfulness: ${averageRestedScore}/5`
+    );
+  } else if (averageSleepHours !== null) {
+    keyPatterns.push(`Average recorded sleep duration: ${averageSleepHours} hours`);
+  }
+  if (topInfluences.length > 0) {
+    keyPatterns.push(`Primary context factors: ${topInfluences.map((i) => i.name).join(', ')}`);
+  }
 
   return {
     timeframeLabel,
@@ -297,6 +391,8 @@ export function buildClinicianSummary(
     energyDistribution,
     averageSleepHours,
     sleepQualityDistribution,
+    averageRestedScore,
+    restedDistribution,
     topEmotions,
     topInfluences,
     topObservations,

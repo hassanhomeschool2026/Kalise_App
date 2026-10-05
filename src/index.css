@@ -77,3 +77,129 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* ========================================================
+   KALISE LIGHT THEME
+   Soft off-white, cool neutrals, crisp subtle borders
+   ======================================================== */
+html.light {
+  background-color: #f5f7fa;
+  color: #0f172a;
+}
+
+html.light body {
+  background-color: #f5f7fa;
+  color: #0f172a;
+}
+
+html.light .bg-\[\#090d16\] {
+  background-color: #f5f7fa !important;
+}
+
+html.light .bg-slate-950 {
+  background-color: #f1f4f8 !important;
+}
+
+html.light .bg-slate-900,
+html.light .bg-slate-900\/90,
+html.light .bg-slate-900\/80,
+html.light .bg-slate-900\/70 {
+  background-color: #ffffff !important;
+  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.06), 0 1px 2px -1px rgba(15, 23, 42, 0.04);
+}
+
+html.light .bg-slate-800,
+html.light .bg-slate-800\/80,
+html.light .bg-slate-800\/70,
+html.light .bg-slate-800\/60,
+html.light .bg-slate-800\/50,
+html.light .bg-slate-800\/40 {
+  background-color: #f8fafc !important;
+}
+
+html.light .bg-slate-700,
+html.light .bg-slate-700\/80 {
+  background-color: #e2e8f0 !important;
+}
+
+html.light .border-slate-800,
+html.light .border-slate-800\/80,
+html.light .border-slate-800\/60,
+html.light .border-slate-800\/50,
+html.light .border-slate-800\/40,
+html.light .border-slate-700,
+html.light .border-slate-700\/80,
+html.light .border-slate-700\/60,
+html.light .border-slate-700\/50,
+html.light .border-slate-700\/40 {
+  border-color: #e2e8f0 !important;
+}
+
+html.light .text-slate-100,
+html.light .text-slate-200 {
+  color: #0f172a !important;
+}
+
+html.light .text-slate-300 {
+  color: #334155 !important;
+}
+
+html.light .text-slate-400 {
+  color: #64748b !important;
+}
+
+html.light .text-slate-500 {
+  color: #64748b !important;
+}
+
+html.light .text-teal-300,
+html.light .text-teal-200 {
+  color: #0d9488 !important;
+}
+
+html.light .text-indigo-300 {
+  color: #4f46e5 !important;
+}
+
+html.light .text-sky-300 {
+  color: #0284c7 !important;
+}
+
+html.light .text-amber-300 {
+  color: #b45309 !important;
+}
+
+html.light .text-rose-300 {
+  color: #e11d48 !important;
+}
+
+html.light header {
+  background-color: rgba(245, 247, 250, 0.92) !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.light nav {
+  background-color: rgba(255, 255, 255, 0.96) !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 -4px 6px -1px rgba(15, 23, 42, 0.03);
+}
+
+html.light input,
+html.light textarea,
+html.light select {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.light input:focus,
+html.light textarea:focus,
+html.light select:focus {
+  border-color: #0d9488 !important;
+}
+
+html.light input::placeholder,
+html.light textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
