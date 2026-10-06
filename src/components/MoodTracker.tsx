@@ -10,8 +10,6 @@ import {
   Moon,
   Eye,
   FileText,
-  ChevronDown,
-  ChevronUp,
   Copy,
   Sparkles,
   Info,
@@ -171,6 +169,14 @@ const OBSERVATION_CHIPS = [
   'Felt in control',
 ];
 
+const getLocalDateString = (isoString: string) => {
+  const d = new Date(isoString);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 export const MoodTracker: React.FC<Props> = ({ moods, onSaveMood, onDeleteMood }) => {
   // Check-in state
   const [selectedLevel, setSelectedLevel] = useState<MoodLevel>('okay');
@@ -189,6 +195,17 @@ export const MoodTracker: React.FC<Props> = ({ moods, onSaveMood, onDeleteMood }
   const [timeFilter, setTimeFilter] = useState<'7d' | '30d' | '90d'>('7d');
   const [showEnergyOverlay, setShowEnergyOverlay] = useState(true);
   const [hoveredPointIndex, setHoveredPointIndex] = useState<number | null>(null);
+
+  // Local date handling for sleep check-in condition
+  const todayLocalStr = useMemo(() => getLocalDateString(new Date().toISOString()), []);
+  const todayEntries = useMemo(() => {
+    return moods
+      .filter((m) => getLocalDateString(m.timestamp) === todayLocalStr)
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  }, [moods, todayLocalStr]);
+
+  const hasLoggedToday = todayEntries.length > 0;
+  const [showSleepSection, setShowSleepSection] = useState(!hasLoggedToday);
 
   // Clinician Summary Modal
   const [showClinicianModal, setShowClinicianModal] = useState(false);
@@ -245,11 +262,11 @@ export const MoodTracker: React.FC<Props> = ({ moods, onSaveMood, onDeleteMood }
     setSelectedRestedLevel(undefined);
     setSleepHours('');
     setSelectedObservations([]);
+    setShowSleepSection(false);
 
     setTimeout(() => {
       setJustSaved(false);
-      setActiveTab('history');
-    }, 1100);
+    }, 2000);
   };
 
   // Filtered moods based on selected timeframe
@@ -328,8 +345,14 @@ export const MoodTracker: React.FC<Props> = ({ moods, onSaveMood, onDeleteMood }
       {/* Top Header & Tab Switcher */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-100 font-serif">Emotional Check-In</h1>
-          <p className="text-xs text-slate-400 mt-0.5">Honor where you are without judgment.</p>
+          <h1 className="text-xl font-bold text-slate-100 font-serif">
+            {activeTab === 'log' ? 'How are you feeling right now?' : 'Your Patterns'}
+          </h1>
+          <p className="text-xs text-slate-400 mt-0.5">
+            {activeTab === 'log'
+              ? 'Check in with yourself without judgment.'
+              : 'Observing your emotional rhythm over time.'}
+          </p>
         </div>
 
         <div className="flex p-1 rounded-2xl bg-slate-800/80 border border-slate-700">
@@ -357,310 +380,433 @@ export const MoodTracker: React.FC<Props> = ({ moods, onSaveMood, onDeleteMood }
       </div>
 
       {activeTab === 'log' ? (
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Animated Central Mood Orb */}
-          <div className="relative rounded-3xl bg-slate-900 border border-slate-800 p-6 overflow-hidden text-center shadow-xl">
-            {/* Ambient dynamic radial glow */}
-            <div
-              className={`absolute inset-0 bg-gradient-to-b ${currentOption.bgOrb} opacity-60 transition-all duration-700 pointer-events-none`}
-            />
+        <div className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Animated Central Mood Orb */}
+            <div className="relative rounded-3xl bg-slate-900 border border-slate-800 p-6 overflow-hidden text-center shadow-xl">
+              {/* Ambient dynamic radial glow */}
+              <div
+                className={`absolute inset-0 bg-gradient-to-b ${currentOption.bgOrb} opacity-60 transition-all duration-700 pointer-events-none`}
+              />
 
-            <div className="relative z-10">
-              <span className="text-[11px] uppercase tracking-widest text-slate-400 font-semibold">
-                Current Feeling
-              </span>
+              <div className="relative z-10">
+                <span className="text-[11px] uppercase tracking-widest text-slate-400 font-semibold">
+                  Current Snapshot
+                </span>
 
-              {/* Pulsing Aura */}
-              <div className="my-5 flex items-center justify-center">
-                <div
-                  className={`w-28 h-28 rounded-full border-2 transition-all duration-500 flex items-center justify-center shadow-2xl ${currentOption.glowClass} animate-serene-breathe bg-slate-900/80`}
+                {/* Pulsing Aura */}
+                <div className="my-5 flex items-center justify-center">
+                  <div
+                    className={`w-28 h-28 rounded-full border-2 transition-all duration-500 flex items-center justify-center shadow-2xl ${currentOption.glowClass} animate-serene-breathe bg-slate-900/80`}
+                  >
+                    <Smile className={`w-12 h-12 ${currentOption.colorClass} transition-colors duration-500`} />
+                  </div>
+                </div>
+
+                <h2
+                  className={`text-xl font-bold capitalize ${currentOption.colorClass} transition-colors duration-300 font-serif`}
                 >
-                  <Smile className={`w-12 h-12 ${currentOption.colorClass} transition-colors duration-500`} />
+                  {currentOption.label}
+                </h2>
+                <p className="text-xs text-slate-300 mt-1 max-w-xs mx-auto">
+                  {currentOption.description}
+                </p>
+
+                {/* 5-Step Mood Scale Selector */}
+                <div className="mt-6 flex items-center justify-between gap-1 max-w-xs mx-auto p-1.5 rounded-2xl bg-slate-800/80 border border-slate-700/80">
+                  {MOOD_OPTIONS.map((opt) => {
+                    const isSelected = opt.level === selectedLevel;
+                    return (
+                      <button
+                        key={opt.level}
+                        type="button"
+                        onClick={() => setSelectedLevel(opt.level)}
+                        className={`flex-1 py-2 px-1 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                          isSelected
+                            ? `bg-slate-700 ${opt.colorClass} shadow-md scale-105 border border-slate-600`
+                            : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
+                        }`}
+                      >
+                        <div className="text-sm">{opt.score}</div>
+                        <div className="text-[10px] truncate">{opt.label.split(' ')[0]}</div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
+            </div>
 
-              <h2
-                className={`text-xl font-bold capitalize ${currentOption.colorClass} transition-colors duration-300 font-serif`}
-              >
-                {currentOption.label}
-              </h2>
-              <p className="text-xs text-slate-300 mt-1 max-w-xs mx-auto">
-                {currentOption.description}
-              </p>
+            {/* 1. Emotion Tag Picker */}
+            <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-200">
+                  What emotions are present? <span className="text-slate-500 font-normal">(Optional)</span>
+                </span>
+                {selectedEmotions.length > 0 && (
+                  <span className="text-[11px] text-teal-400 font-medium">
+                    {selectedEmotions.length} selected
+                  </span>
+                )}
+              </div>
 
-              {/* 5-Step Mood Scale Selector */}
-              <div className="mt-6 flex items-center justify-between gap-1 max-w-xs mx-auto p-1.5 rounded-2xl bg-slate-800/80 border border-slate-700/80">
-                {MOOD_OPTIONS.map((opt) => {
-                  const isSelected = opt.level === selectedLevel;
+              <div className="flex flex-wrap gap-1.5">
+                {EMOTION_TAGS.map((tag) => {
+                  const isPicked = selectedEmotions.includes(tag);
                   return (
                     <button
-                      key={opt.level}
+                      key={tag}
                       type="button"
-                      onClick={() => setSelectedLevel(opt.level)}
-                      className={`flex-1 py-2 px-1 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                        isSelected
-                          ? `bg-slate-700 ${opt.colorClass} shadow-md scale-105 border border-slate-600`
-                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
+                      onClick={() => toggleEmotion(tag)}
+                      className={`px-3 py-1.5 rounded-full text-xs transition cursor-pointer ${
+                        isPicked
+                          ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 font-medium'
+                          : 'bg-slate-800/80 text-slate-400 border border-slate-700/60 hover:text-slate-200'
                       }`}
                     >
-                      <div className="text-sm">{opt.score}</div>
-                      <div className="text-[10px] truncate">{opt.label.split(' ')[0]}</div>
+                      {tag}
                     </button>
                   );
                 })}
               </div>
             </div>
-          </div>
 
-          {/* 1. Emotion Tag Picker */}
-          <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-5 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-200">
-                What emotions are present? <span className="text-slate-500 font-normal">(Optional)</span>
-              </span>
-              {selectedEmotions.length > 0 && (
-                <span className="text-[11px] text-teal-400 font-medium">
-                  {selectedEmotions.length} selected
+            {/* 2. Influence Tag Picker */}
+            <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-200">
+                  What may have influenced your mood? <span className="text-slate-500 font-normal">(Optional)</span>
                 </span>
-              )}
-            </div>
-
-            <div className="flex flex-wrap gap-1.5">
-              {EMOTION_TAGS.map((tag) => {
-                const isPicked = selectedEmotions.includes(tag);
-                return (
-                  <button
-                    key={tag}
-                    type="button"
-                    onClick={() => toggleEmotion(tag)}
-                    className={`px-3 py-1.5 rounded-full text-xs transition cursor-pointer ${
-                      isPicked
-                        ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 font-medium'
-                        : 'bg-slate-800/80 text-slate-400 border border-slate-700/60 hover:text-slate-200'
-                    }`}
-                  >
-                    {tag}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* 2. Influence Tag Picker */}
-          <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-5 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-200">
-                What may have influenced your mood? <span className="text-slate-500 font-normal">(Optional)</span>
-              </span>
-              {selectedInfluences.length > 0 && (
-                <span className="text-[11px] text-teal-400 font-medium">
-                  {selectedInfluences.length} selected
-                </span>
-              )}
-            </div>
-
-            <div className="flex flex-wrap gap-1.5">
-              {INFLUENCE_TAGS.map((tag) => {
-                const isPicked = selectedInfluences.includes(tag);
-                return (
-                  <button
-                    key={tag}
-                    type="button"
-                    onClick={() => toggleInfluence(tag)}
-                    className={`px-3 py-1.5 rounded-full text-xs transition cursor-pointer ${
-                      isPicked
-                        ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 font-medium'
-                        : 'bg-slate-800/80 text-slate-400 border border-slate-700/60 hover:text-slate-200'
-                    }`}
-                  >
-                    {tag}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* 3. Energy Tracking (Optional) */}
-          <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-5 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <BatteryCharging className="w-4 h-4 text-teal-400" />
-                <span className="text-xs font-semibold text-slate-200">How is your energy today?</span>
+                {selectedInfluences.length > 0 && (
+                  <span className="text-[11px] text-teal-400 font-medium">
+                    {selectedInfluences.length} selected
+                  </span>
+                )}
               </div>
-              <span className="text-[11px] text-slate-500 font-normal">Optional</span>
-            </div>
-            <p className="text-[11px] text-slate-400 leading-relaxed">
-              Energy is physical vitality and focus, distinct from emotional mood.
-            </p>
 
-            <div className="grid grid-cols-5 gap-1.5 pt-1">
-              {ENERGY_OPTIONS.map((opt) => {
-                const isSelected = selectedEnergy === opt.level;
-                return (
-                  <button
-                    key={opt.level}
-                    type="button"
-                    onClick={() => setSelectedEnergy(isSelected ? undefined : opt.level)}
-                    className={`py-2 px-1 rounded-xl text-xs font-medium text-center transition cursor-pointer ${
-                      isSelected
-                        ? `bg-slate-800 ${opt.colorClass} border border-teal-500/50 shadow-md font-bold`
-                        : 'bg-slate-800/60 text-slate-400 border border-slate-700/60 hover:text-slate-200'
-                    }`}
-                  >
-                    <div className="text-xs">{opt.score}</div>
-                    <div className="text-[10px] truncate mt-0.5">{opt.label}</div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* 4. Sleep Tracking (Optional) */}
-          <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-5 space-y-3.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Moon className="w-4 h-4 text-sky-400" />
-                <span className="text-xs font-semibold text-slate-200">How was your sleep?</span>
-              </div>
-              <span className="text-[11px] text-slate-500 font-normal">Optional</span>
-            </div>
-
-            {/* Quality scale */}
-            <div className="grid grid-cols-5 gap-1.5">
-              {SLEEP_QUALITY_OPTIONS.map((opt) => {
-                const isSelected = selectedSleepQuality === opt.quality;
-                return (
-                  <button
-                    key={opt.quality}
-                    type="button"
-                    onClick={() => setSelectedSleepQuality(isSelected ? undefined : opt.quality)}
-                    className={`py-2 px-1 rounded-xl text-xs font-medium text-center transition cursor-pointer ${
-                      isSelected
-                        ? 'bg-sky-500/20 text-sky-300 border border-sky-500/50 shadow-md font-bold'
-                        : 'bg-slate-800/60 text-slate-400 border border-slate-700/60 hover:text-slate-200'
-                    }`}
-                  >
-                    <div className="text-[11px] truncate">{opt.label}</div>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Hours slept input */}
-            <div className="flex items-center justify-between pt-1 text-xs">
-              <span className="text-slate-300">Hours slept (duration):</span>
-              <div className="flex items-center gap-1.5">
-                <input
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  max="24"
-                  value={sleepHours}
-                  onChange={(e) => setSleepHours(e.target.value)}
-                  placeholder="e.g. 7.5"
-                  className="w-20 px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-right text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-teal-500/60"
-                />
-                <span className="text-slate-400 text-xs">hrs</span>
+              <div className="flex flex-wrap gap-1.5">
+                {INFLUENCE_TAGS.map((tag) => {
+                  const isPicked = selectedInfluences.includes(tag);
+                  return (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => toggleInfluence(tag)}
+                      className={`px-3 py-1.5 rounded-full text-xs transition cursor-pointer ${
+                        isPicked
+                          ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 font-medium'
+                          : 'bg-slate-800/80 text-slate-400 border border-slate-700/60 hover:text-slate-200'
+                      }`}
+                    >
+                      {tag}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            {/* How rested do you feel? (Distinguishing restfulness from sleep duration) */}
-            <div className="pt-2.5 border-t border-slate-800/80 space-y-1.5">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-300 font-medium">How rested do you feel?</span>
-                <span className="text-[10px] text-slate-500">Perceived restfulness</span>
+            {/* 3. Energy Tracking (Optional) */}
+            <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <BatteryCharging className="w-4 h-4 text-teal-400" />
+                  <span className="text-xs font-semibold text-slate-200">How is your energy right now?</span>
+                </div>
+                <span className="text-[11px] text-slate-500 font-normal">Optional</span>
               </div>
-              <div className="grid grid-cols-5 gap-1.5 pt-0.5">
-                {RESTED_OPTIONS.map((opt) => {
-                  const isSelected = selectedRestedLevel === opt.level;
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Energy is physical vitality and focus, distinct from emotional mood.
+              </p>
+
+              <div className="grid grid-cols-5 gap-1.5 pt-1">
+                {ENERGY_OPTIONS.map((opt) => {
+                  const isSelected = selectedEnergy === opt.level;
                   return (
                     <button
                       key={opt.level}
                       type="button"
-                      onClick={() => setSelectedRestedLevel(isSelected ? undefined : opt.level)}
+                      onClick={() => setSelectedEnergy(isSelected ? undefined : opt.level)}
                       className={`py-2 px-1 rounded-xl text-xs font-medium text-center transition cursor-pointer ${
                         isSelected
-                          ? 'bg-teal-500/20 text-teal-300 border border-teal-500/50 shadow-md font-bold'
+                          ? `bg-slate-800 ${opt.colorClass} border border-teal-500/50 shadow-md font-bold`
                           : 'bg-slate-800/60 text-slate-400 border border-slate-700/60 hover:text-slate-200'
                       }`}
                     >
-                      <div className="text-xs font-bold">{opt.score}</div>
+                      <div className="text-xs">{opt.score}</div>
                       <div className="text-[10px] truncate mt-0.5">{opt.label}</div>
                     </button>
                   );
                 })}
               </div>
             </div>
-          </div>
 
-          {/* 5. Thoughts & Behavior Observations (Optional) */}
-          <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-5 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Eye className="w-4 h-4 text-indigo-400" />
-                <span className="text-xs font-semibold text-slate-200">Anything else you've noticed?</span>
-              </div>
-              <span className="text-[11px] text-slate-500 font-normal">Optional</span>
-            </div>
-            <p className="text-[11px] text-slate-400 leading-relaxed">
-              Personal observations to help notice patterns over time. Non-diagnostic.
-            </p>
-
-            <div className="flex flex-wrap gap-1.5">
-              {OBSERVATION_CHIPS.map((chip) => {
-                const isPicked = selectedObservations.includes(chip);
-                return (
-                  <button
-                    key={chip}
-                    type="button"
-                    onClick={() => toggleObservation(chip)}
-                    className={`px-3 py-1.5 rounded-full text-xs transition cursor-pointer ${
-                      isPicked
-                        ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 font-medium'
-                        : 'bg-slate-800/80 text-slate-400 border border-slate-700/60 hover:text-slate-200'
-                    }`}
-                  >
-                    {chip}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* 6. Short Reflection Note */}
-          <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-5 space-y-2">
-            <label className="block text-xs font-semibold text-slate-200">
-              Short reflection or context <span className="text-slate-500 font-normal">(Optional)</span>
-            </label>
-            <textarea
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="e.g. Felt a wave of relief after finishing that call..."
-              rows={2}
-              className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-800/70 border border-slate-700 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-teal-500/60 resize-none"
-            />
-          </div>
-
-          {/* Save Button */}
-          <button
-            type="submit"
-            disabled={justSaved}
-            className={`w-full py-3.5 rounded-2xl font-bold text-xs tracking-wider uppercase transition-all duration-300 cursor-pointer shadow-lg ${
-              justSaved
-                ? 'bg-teal-400 text-slate-950 flex items-center justify-center gap-2'
-                : 'bg-gradient-to-r from-teal-500 to-indigo-500 hover:opacity-95 text-slate-950'
-            }`}
-          >
-            {justSaved ? (
-              <>
-                <Check className="w-4 h-4 stroke-[3]" />
-                Saved with Care
-              </>
+            {/* 4. Sleep Tracking (Optional / Conditional) */}
+            {hasLoggedToday && !showSleepSection ? (
+              <button
+                type="button"
+                onClick={() => setShowSleepSection(true)}
+                className="w-full py-3 px-4 rounded-3xl bg-slate-900/60 border border-slate-800 hover:border-sky-500/40 text-xs text-sky-300 font-medium flex items-center justify-center gap-2 transition cursor-pointer"
+              >
+                <Moon className="w-4 h-4" />
+                <span>Add sleep details</span>
+              </button>
             ) : (
-              'Save Mood Entry'
+              <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-5 space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Moon className="w-4 h-4 text-sky-400" />
+                    <span className="text-xs font-semibold text-slate-200">How was your sleep?</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-slate-500 font-normal">Optional</span>
+                    {hasLoggedToday && (
+                      <button
+                        type="button"
+                        onClick={() => setShowSleepSection(false)}
+                        className="text-[11px] text-slate-400 hover:text-slate-200 underline cursor-pointer"
+                      >
+                        Hide
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Quality scale */}
+                <div className="grid grid-cols-5 gap-1.5">
+                  {SLEEP_QUALITY_OPTIONS.map((opt) => {
+                    const isSelected = selectedSleepQuality === opt.quality;
+                    return (
+                      <button
+                        key={opt.quality}
+                        type="button"
+                        onClick={() => setSelectedSleepQuality(isSelected ? undefined : opt.quality)}
+                        className={`py-2 px-1 rounded-xl text-xs font-medium text-center transition cursor-pointer ${
+                          isSelected
+                            ? 'bg-sky-500/20 text-sky-300 border border-sky-500/50 shadow-md font-bold'
+                            : 'bg-slate-800/60 text-slate-400 border border-slate-700/60 hover:text-slate-200'
+                        }`}
+                      >
+                        <div className="text-[11px] truncate">{opt.label}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Hours slept input */}
+                <div className="flex items-center justify-between pt-1 text-xs">
+                  <span className="text-slate-300">Hours slept (duration):</span>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="0"
+                      max="24"
+                      value={sleepHours}
+                      onChange={(e) => setSleepHours(e.target.value)}
+                      placeholder="e.g. 7.5"
+                      className="w-20 px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-right text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-teal-500/60"
+                    />
+                    <span className="text-slate-400 text-xs">hrs</span>
+                  </div>
+                </div>
+
+                {/* How rested do you feel? */}
+                <div className="pt-2.5 border-t border-slate-800/80 space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-300 font-medium">How rested do you feel?</span>
+                    <span className="text-[10px] text-slate-500">Perceived restfulness</span>
+                  </div>
+                  <div className="grid grid-cols-5 gap-1.5 pt-0.5">
+                    {RESTED_OPTIONS.map((opt) => {
+                      const isSelected = selectedRestedLevel === opt.level;
+                      return (
+                        <button
+                          key={opt.level}
+                          type="button"
+                          onClick={() => setSelectedRestedLevel(isSelected ? undefined : opt.level)}
+                          className={`py-2 px-1 rounded-xl text-xs font-medium text-center transition cursor-pointer ${
+                            isSelected
+                              ? 'bg-teal-500/20 text-teal-300 border border-teal-500/50 shadow-md font-bold'
+                              : 'bg-slate-800/60 text-slate-400 border border-slate-700/60 hover:text-slate-200'
+                          }`}
+                        >
+                          <div className="text-xs font-bold">{opt.score}</div>
+                          <div className="text-[10px] truncate mt-0.5">{opt.label}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
             )}
-          </button>
-        </form>
+
+            {/* 5. Thoughts & Behavior Observations (Optional) */}
+            <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Eye className="w-4 h-4 text-indigo-400" />
+                  <span className="text-xs font-semibold text-slate-200">Anything else you've noticed?</span>
+                </div>
+                <span className="text-[11px] text-slate-500 font-normal">Optional</span>
+              </div>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Personal observations to help notice patterns over time. Non-diagnostic.
+              </p>
+
+              <div className="flex flex-wrap gap-1.5">
+                {OBSERVATION_CHIPS.map((chip) => {
+                  const isPicked = selectedObservations.includes(chip);
+                  return (
+                    <button
+                      key={chip}
+                      type="button"
+                      onClick={() => toggleObservation(chip)}
+                      className={`px-3 py-1.5 rounded-full text-xs transition cursor-pointer ${
+                        isPicked
+                          ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 font-medium'
+                          : 'bg-slate-800/80 text-slate-400 border border-slate-700/60 hover:text-slate-200'
+                      }`}
+                    >
+                      {chip}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 6. Short Reflection Note */}
+            <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-5 space-y-2">
+              <label className="block text-xs font-semibold text-slate-200">
+                Short reflection or context <span className="text-slate-500 font-normal">(Optional)</span>
+              </label>
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="e.g. Felt a wave of relief after finishing that call..."
+                rows={2}
+                className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-800/70 border border-slate-700 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-teal-500/60 resize-none"
+              />
+            </div>
+
+            {/* Save Button */}
+            <button
+              type="submit"
+              disabled={justSaved}
+              className={`w-full py-3.5 rounded-2xl font-bold text-xs tracking-wider uppercase transition-all duration-300 cursor-pointer shadow-lg ${
+                justSaved
+                  ? 'bg-teal-400 text-slate-950 flex items-center justify-center gap-2'
+                  : 'bg-gradient-to-r from-teal-500 to-indigo-500 hover:opacity-95 text-slate-950'
+              }`}
+            >
+              {justSaved ? (
+                <>
+                  <Check className="w-4 h-4 stroke-[3]" />
+                  Mood saved. Log another mood
+                </>
+              ) : (
+                'Save Mood Check-In'
+              )}
+            </button>
+          </form>
+
+          {/* Today's Mood Timeline */}
+          <div className="pt-6 border-t border-slate-800 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                <Clock className="w-4 h-4 text-teal-400" />
+                <span>Today's Mood Timeline</span>
+              </h3>
+              <span className="text-[11px] text-slate-400 font-medium">{todayEntries.length} check-ins today</span>
+            </div>
+
+            {todayEntries.length === 0 ? (
+              <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 text-center space-y-2">
+                <p className="text-xs text-slate-300 font-medium">No check-ins yet today.</p>
+                <p className="text-xs text-slate-400">How are you feeling right now?</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {todayEntries.map((entry) => {
+                  const opt = MOOD_OPTIONS.find((m) => m.level === entry.level) || MOOD_OPTIONS[2];
+                  const timeFormatted = new Date(entry.timestamp).toLocaleTimeString('en-US', {
+                    hour: 'numeric',
+                    minute: '2-digit',
+                  });
+
+                  return (
+                    <div
+                      key={entry.id}
+                      className="p-4 rounded-3xl bg-slate-900/90 border border-slate-800 space-y-2.5 transition hover:border-slate-700 shadow-sm"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`w-9 h-9 rounded-2xl flex items-center justify-center font-bold text-sm ${opt.colorClass} bg-slate-800 border border-slate-700`}
+                          >
+                            {entry.score}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p className="text-xs font-bold text-slate-100 capitalize">{entry.label}</p>
+                              <span className="text-[10px] text-slate-450">• {timeFormatted}</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
+                              {entry.energyLevel && (
+                                <span>Energy: <strong className="capitalize text-teal-300">{entry.energyLevel}</strong></span>
+                              )}
+                              {entry.sleepHours && (
+                                <span>Sleep: <strong className="text-sky-300">{entry.sleepHours}h</strong></span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => onDeleteMood(entry.id)}
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-slate-800 transition cursor-pointer"
+                          title="Delete entry"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      {entry.emotions.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {entry.emotions.map((em) => (
+                            <span
+                              key={em}
+                              className="px-2 py-0.5 rounded-md bg-teal-500/10 text-teal-300 text-[10px] font-medium border border-teal-500/20"
+                            >
+                              {em}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {entry.influences.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {entry.influences.map((inf) => (
+                            <span
+                              key={inf}
+                              className="px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-300 text-[10px] font-medium border border-indigo-500/20"
+                            >
+                              {inf}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {entry.note && (
+                        <p className="text-xs text-slate-300 bg-slate-800/60 p-2.5 rounded-xl border border-slate-700/50 leading-relaxed italic">
+                          "{entry.note}"
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
       ) : (
         /* History & Patterns View */
         <div className="space-y-5">
@@ -869,6 +1015,8 @@ export const MoodTracker: React.FC<Props> = ({ moods, onSaveMood, onDeleteMood }
                           weekday: 'short',
                           month: 'short',
                           day: 'numeric',
+                          hour: 'numeric',
+                          minute: '2-digit',
                         })}
                         : <span className="text-teal-300 capitalize">{chronologicalEntries[hoveredPointIndex].label} ({chronologicalEntries[hoveredPointIndex].score}/5)</span>
                       </p>
@@ -1128,7 +1276,7 @@ export const MoodTracker: React.FC<Props> = ({ moods, onSaveMood, onDeleteMood }
             <div className="p-3 rounded-2xl bg-teal-500/10 border border-teal-500/20 text-xs text-teal-200 leading-relaxed flex items-start gap-2">
               <Info className="w-4 h-4 text-teal-400 shrink-0 mt-0.5" />
               <p>
-                This summary provides self-reported data from your personal Kalise check-ins to assist you during appointments with your therapist, psychiatrist, or physician. Non-diagnostic.
+                This summary provides self-reported data from your personal Kalise check-ins (multiple check-ins may occur on the same day) to assist you during appointments with your therapist, psychiatrist, or physician. Non-diagnostic.
               </p>
             </div>
 

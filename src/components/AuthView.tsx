@@ -190,8 +190,14 @@ export const AuthView: React.FC<Props> = ({
         setErrorMessage('An account with this email already exists. Try logging in.');
       } else if (msg.includes('Email not confirmed')) {
         setErrorMessage('Please confirm your email address before logging in.');
-      } else if (msg.toLowerCase().includes('rate limit') || msg.toLowerCase().includes('over_email_send_rate_limit')) {
-        setErrorMessage('Email rate limit reached. Please wait a few minutes before requesting another email.');
+      } else if (
+        msg.toLowerCase().includes('rate limit') ||
+        msg.toLowerCase().includes('over_email_send_rate_limit') ||
+        msg.toLowerCase().includes('error sending confirmation email')
+      ) {
+        setErrorMessage(
+          'Verification email could not be sent. Supabase default free-tier SMTP has a strict rate limit (3-4 emails/hour). Please configure a custom SMTP provider (such as Resend or SendGrid) in your Supabase Dashboard under Authentication -> Providers -> SMTP.'
+        );
       } else {
         setErrorMessage(msg);
       }
