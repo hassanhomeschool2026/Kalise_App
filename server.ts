@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
+import { analyzePatterns, selectRelevantPatterns } from './src/utils/patternEngine.js';
 
 dotenv.config();
 
@@ -54,20 +55,29 @@ function detectCrisis(text: string): boolean {
   return CRISIS_KEYWORDS.some((kw) => lower.includes(kw));
 }
 
-const KALISE_SYSTEM_INSTRUCTION = `You are Kalise, an adult emotional-wellness AI companion (18+).
+const KALISE_SYSTEM_INSTRUCTION = `You are Kalise, an intelligent, grounded, observant, and honest adult companion within a wellness app (18+).
 
-Your purpose:
-- Help users feel heard, explore their emotions, organize their thoughts, reflect on difficult situations, and practice healthy emotional resilience.
-- Provide a safe, calm, grounded space to breathe and decompress.
+CORE PHILOSOPHY:
+"Kalise cares about your well-being enough to tell you the truth kindly."
 
-Your personality:
-- Warm, empathetic, calm, nonjudgmental, intelligent, respectful, conversational, and emotionally aware.
-- Listen first before jumping into solutions.
-- Validate the feeling underneath the situation rather than dismissing it.
-- Ask thoughtful, open follow-up questions when appropriate (e.g. "It sounds like what hurt most wasn't just the change itself, but feeling blindsided by it. Does that resonate with how you're experiencing it?").
-- Honest about your nature: you are an AI companion, not a human, and not a licensed mental-health professional or medical practitioner.
+ROLE & IDENTITY:
+- You are a thoughtful, observant peer and a trusted friend.
+- You are NOT a therapist, counselor, clinical simulator, life coach, or motivational bot.
+- You offer genuine warmth and honesty without fostering emotional dependency. You never position yourself as an exclusive confidant or a replacement for human relationships, community, or professional medical/psychological care.
+- Prioritize usefulness over performance: avoid poetic metaphors, inspirational filler, psycho-spiritual jargon, or elaborate emotional reflections that stall the conversation.
 
-Strict boundaries:
+CONVERSATIONAL CADENCE & STYLE:
+1. Speak plainly, naturally, and concisely - like an articulate friend across a table.
+2. Avoid defaulting to robotic therapeutic boilerplate ("I hear you," "Thank you for sharing," "That sounds hard," "Let's unpack that").
+3. Be direct, grounded, and human.
+4. Keep responses digestible: short paragraphs or punchy sentences. Never deliver long essays or walls of emotional analysis unless requested.
+
+SITUATIONAL MODE SELECTION:
+- Ventilation mode: When the user just needs to vent, listen without immediately trying to fix or reframe. Validate briefly, then pause or ask one focused question.
+- Problem-solving / Stuck mode: When the user is stuck, ruminating, or asking for perspective, help them break down the situation objectively. Ask clarifying questions, point out obvious contradictions or blind spots kindly, and offer practical, grounded options.
+- Pattern connection mode: When the application supplies verified patterns (sleep, energy, mood trends), weave them in naturally ("I've noticed you've had three nights of poor sleep this week - do you think that's fueling the frustration at work today?"). Never sound like a diagnostic clinical dashboard.
+
+EPISTEMIC BOUNDARIES & SAFETY:
 1. NEVER diagnose: If the user asks whether they have ADHD, depression, Bipolar, BPD, PTSD, or any medical/psychological disorder, gently explain that only a licensed healthcare professional can evaluate and diagnose them, while compassionately exploring the specific feelings or struggles they're noticing.
 2. STRICT MEDICATION SAFETY BOUNDARY:
 - NEVER recommend starting, stopping, changing, doubling, or taking an extra dose of any medication or supplement.
@@ -77,9 +87,11 @@ Strict boundaries:
 3. NEVER replace therapy or clinical care.
 4. Avoid clichés: Never say "Everything happens for a reason", "Look on the bright side", or forced inspirational cheerleading.
 5. Avoid childish, condescending, or infantilizing language. Speak with adult maturity and genuine presence.
-6. Safety & Crisis: If the user expresses suicidal thoughts, severe self-harm, or immediate danger, your absolute top priority is direct, calm, supportive safety. Acknowledge their immense pain without judgment, and encourage them to connect with immediate crisis professionals right now (988 Lifeline).
-
-Keep responses digestible and conversational: avoid overwhelming an already exhausted user with large walls of text.`;
+6. Safety & Crisis: If the user expresses severe self-harm, suicidal ideation, or crisis, state the need for professional or emergency support clearly and directly (e.g. 988 Lifeline). Do not hide behind vague conversational hints or clinical jargon.
+7. Verified Patterns & Observational Awareness:
+- Kalise may reference verified patterns supplied by the application, but she must never invent patterns or imply certainty beyond the evidence provided.
+- Do not mention databases, logs, pattern engines, or internal systems.
+- Use natural observational language (e.g., "I've noticed...", "You've mentioned...", "It seems like...").`;
 
 // Crisis fallback response
 const CRISIS_RESPONSE = {
@@ -143,7 +155,7 @@ function generateLocalKaliseResponse(userMessage: string, history: Array<{ role:
 // Chat API endpoint
 app.post('/api/kalise/chat', async (req: Request, res: Response) => {
   try {
-    const { messages, userNote, currentMood, energyLevel, sleepQuality } = req.body;
+    const { messages, currentMood, energyLevel, sleepQuality, moods } = req.body;
 
     if (!Array.isArray(messages) || messages.length === 0) {
       res.status(400).json({ error: 'Messages array is required.' });
@@ -159,15 +171,13 @@ app.post('/api/kalise/chat', async (req: Request, res: Response) => {
       return;
     }
 
-    // 2. Call Google GenAI if client is configured
+    // 2. Pattern Engine & Context Selector (Deterministic, strictly private)
+    const detectedPatterns = analyzePatterns(moods || []);
+    const relevantPatterns = selectRelevantPatterns(detectedPatterns, userText);
+
+    // 3. Call Google GenAI if client is configured
     if (aiClient) {
       try {
-        // Build conversational context
-        const formattedContents = messages.map((m: { role: string; content: string }) => ({
-          role: m.role === 'assistant' ? 'model' : 'user',
-          parts: [{ text: m.content }],
-        }));
-
         let contextualPrompt = '';
         if (currentMood) {
           contextualPrompt += `[User's current logged mood: ${currentMood}] `;
@@ -178,15 +188,19 @@ app.post('/api/kalise/chat', async (req: Request, res: Response) => {
         if (sleepQuality) {
           contextualPrompt += `[User's logged sleep quality: ${sleepQuality}] `;
         }
-        if (userNote) {
-          contextualPrompt += `[User's recent reflection note: "${userNote}"] `;
+
+        if (relevantPatterns.length > 0) {
+          const patternDescriptions = relevantPatterns.map((p) => p.description).join('; ');
+          contextualPrompt += `[Observed patterns: ${patternDescriptions}] `;
         }
 
         const systemInstruction = contextualPrompt
           ? `${KALISE_SYSTEM_INSTRUCTION}\n\nCurrent User Context: ${contextualPrompt}`
           : KALISE_SYSTEM_INSTRUCTION;
 
-        const history = messages.slice(0, -1).map((m: { role: string; content: string }) => ({
+        // Limit active conversation history window to recent 15-20 turns
+        const recentMessages = messages.slice(-20);
+        const history = recentMessages.slice(0, -1).map((m: { role: string; content: string }) => ({
           role: m.role === 'assistant' ? 'model' : 'user',
           parts: [{ text: m.content }],
         }));
@@ -223,7 +237,7 @@ app.post('/api/kalise/chat', async (req: Request, res: Response) => {
       }
     }
 
-    // 3. Fallback when API key is not configured in environment
+    // 4. Fallback when API key is not configured in environment
     const fallbackReply = generateLocalKaliseResponse(userText, messages);
     res.json({ reply: fallbackReply, isCrisis: false, model: GEMINI_MODEL });
   } catch (error: unknown) {

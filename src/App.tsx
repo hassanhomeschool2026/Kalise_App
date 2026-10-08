@@ -522,10 +522,10 @@ function KaliseMainApp() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: updatedHistory.map((m) => ({ role: m.role, content: m.content })),
-          userNote: latestMood?.note,
           currentMood: latestMood?.label,
           energyLevel: latestMood?.energyLevel,
           sleepQuality: latestMood?.sleepQuality,
+          moods: storageService.getMoods(userId),
         }),
         signal: controller.signal,
       });
