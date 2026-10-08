@@ -149,16 +149,16 @@ export const HomeDashboard: React.FC<Props> = ({
             </button>
           </div>
         ) : (
-          <div className="mt-4 text-center py-4">
-            <p className="text-xs text-slate-400 mb-3.5">
-              Checking in with yourself takes less than thirty seconds.
-            </p>
+          <div className="mt-4">
             <button
               onClick={() => onNavigate('mood')}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-semibold text-xs tracking-wide transition cursor-pointer shadow-lg shadow-teal-500/20"
+              className="w-full py-3 px-4 rounded-2xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-semibold text-xs tracking-wide transition cursor-pointer flex items-center justify-between shadow-lg shadow-teal-500/15"
             >
-              <Smile className="w-4 h-4" />
-              Log Current Mood
+              <span className="flex items-center gap-2">
+                <Smile className="w-4 h-4" />
+                <span>Check in</span>
+              </span>
+              <ArrowRight className="w-4 h-4" />
             </button>
           </div>
         )}
@@ -186,17 +186,13 @@ export const HomeDashboard: React.FC<Props> = ({
 
         {medications.length === 0 ? (
           <div className="mt-3.5 flex items-center justify-between gap-3">
-            <div className="space-y-0.5">
-              <p className="text-xs font-medium text-slate-200">Add a medication reminder</p>
-              <p className="text-[11px] text-slate-400">
-                Track medications, vitamins, or supplements on your schedule.
-              </p>
-            </div>
+            <p className="text-xs text-slate-400">No reminders yet.</p>
             <button
               onClick={onOpenMedications}
-              className="px-3 py-1.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shrink-0 transition cursor-pointer"
+              className="px-3 py-1.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shrink-0 transition cursor-pointer flex items-center gap-1"
             >
-              Add Reminder
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add medication</span>
             </button>
           </div>
         ) : todayDoses.length === 0 ? (
@@ -299,7 +295,7 @@ export const HomeDashboard: React.FC<Props> = ({
         )}
       </div>
 
-      {/* 2. Kalise AI Companion Card */}
+      {/* 2. Kalise Companion Card */}
       <div
         onClick={() => onNavigate('kalise')}
         className="group relative overflow-hidden rounded-3xl bg-gradient-to-tr from-slate-900 via-indigo-950/30 to-slate-900 border border-indigo-500/30 p-5 shadow-xl hover:border-indigo-500/50 transition cursor-pointer"
@@ -313,12 +309,7 @@ export const HomeDashboard: React.FC<Props> = ({
               <MessageSquareHeart className="w-6 h-6 text-teal-300" />
             </div>
             <div>
-              <div className="flex items-center gap-1.5">
-                <h3 className="text-base font-semibold text-slate-100 font-serif">Kalise Companion</h3>
-                <span className="px-1.5 py-0.5 rounded-full bg-teal-500/20 text-teal-300 text-[9px] font-bold uppercase tracking-wider">
-                  AI Wellness
-                </span>
-              </div>
+              <h3 className="text-base font-semibold text-slate-100 font-serif">Kalise Companion</h3>
               <p className="text-xs text-slate-400 mt-0.5">
                 Have something on your mind? Kalise is here to listen.
               </p>

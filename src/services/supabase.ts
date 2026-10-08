@@ -790,10 +790,10 @@ export const remoteDbService = {
     }
   },
 
-  async insertMood(userId: string, entry: Omit<MoodEntry, 'id'> & { id?: string }): Promise<void> {
-    if (!isSupabaseConfigured) return;
+  async insertMood(userId: string, entry: Omit<MoodEntry, 'id'> & { id?: string }): Promise<string | null> {
+    if (!isSupabaseConfigured) return null;
     try {
-      await supabase.from('kalise_mood_entries').insert({
+      const { data, error } = await supabase.from('kalise_mood_entries').insert({
         user_id: userId,
         app_id: 'kalise',
         level: entry.level,
@@ -810,9 +810,12 @@ export const remoteDbService = {
         thought_behaviors: entry.thoughtBehaviors,
         note: entry.note,
         recorded_at: entry.timestamp || new Date().toISOString(),
-      });
+      }).select('id').single();
+      if (error) console.warn('insertMood error:', error);
+      return data?.id || null;
     } catch (e) {
       console.warn('insertMood error:', e);
+      return null;
     }
   },
 
@@ -851,11 +854,11 @@ export const remoteDbService = {
     }
   },
 
-  async saveJournal(userId: string, entry: Omit<JournalEntry, 'id'> & { id?: string }): Promise<void> {
-    if (!isSupabaseConfigured) return;
+  async saveJournal(userId: string, entry: Omit<JournalEntry, 'id'> & { id?: string }): Promise<string | null> {
+    if (!isSupabaseConfigured) return null;
     try {
       const now = new Date().toISOString();
-      if (entry.id && !entry.id.startsWith('journal-')) {
+      if (entry.id && !entry.id.startsWith('journal-') && !entry.id.startsWith('seed-')) {
         await supabase
           .from('kalise_journal_entries')
           .update({
@@ -866,8 +869,9 @@ export const remoteDbService = {
             updated_at: now,
           })
           .match({ id: entry.id, user_id: userId, app_id: 'kalise' });
+        return entry.id;
       } else {
-        await supabase.from('kalise_journal_entries').insert({
+        const { data, error } = await supabase.from('kalise_journal_entries').insert({
           user_id: userId,
           app_id: 'kalise',
           title: entry.title,
@@ -876,10 +880,13 @@ export const remoteDbService = {
           tags: entry.tags,
           created_at: entry.createdAt || now,
           updated_at: now,
-        });
+        }).select('id').single();
+        if (error) console.warn('saveJournal error:', error);
+        return data?.id || null;
       }
     } catch (e) {
       console.warn('saveJournal error:', e);
+      return null;
     }
   },
 
@@ -924,11 +931,11 @@ export const remoteDbService = {
     }
   },
 
-  async saveMedication(userId: string, med: Omit<Medication, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }): Promise<void> {
-    if (!isSupabaseConfigured) return;
+  async saveMedication(userId: string, med: Omit<Medication, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }): Promise<string | null> {
+    if (!isSupabaseConfigured) return null;
     try {
       const now = new Date().toISOString();
-      if (med.id && !med.id.startsWith('med-')) {
+      if (med.id && !med.id.startsWith('med-') && !med.id.startsWith('seed-')) {
         await supabase
           .from('kalise_medications')
           .update({
@@ -944,8 +951,9 @@ export const remoteDbService = {
             updated_at: now,
           })
           .match({ id: med.id, user_id: userId, app_id: 'kalise' });
+        return med.id;
       } else {
-        await supabase.from('kalise_medications').insert({
+        const { data, error } = await supabase.from('kalise_medications').insert({
           user_id: userId,
           app_id: 'kalise',
           name: med.name,
@@ -959,10 +967,13 @@ export const remoteDbService = {
           active: med.active,
           created_at: now,
           updated_at: now,
-        });
+        }).select('id').single();
+        if (error) console.warn('saveMedication error:', error);
+        return data?.id || null;
       }
     } catch (e) {
       console.warn('saveMedication error:', e);
+      return null;
     }
   },
 
@@ -1004,10 +1015,10 @@ export const remoteDbService = {
     }
   },
 
-  async saveMedicationLog(userId: string, log: Omit<MedicationLog, 'id'> & { id?: string }): Promise<void> {
-    if (!isSupabaseConfigured) return;
+  async saveMedicationLog(userId: string, log: Omit<MedicationLog, 'id'> & { id?: string }): Promise<string | null> {
+    if (!isSupabaseConfigured) return null;
     try {
-      await supabase.from('kalise_medication_logs').insert({
+      const { data, error } = await supabase.from('kalise_medication_logs').insert({
         user_id: userId,
         app_id: 'kalise',
         medication_id: log.medicationId,
@@ -1019,9 +1030,12 @@ export const remoteDbService = {
         recorded_at: log.recordedAt || new Date().toISOString(),
         snoozed_until: log.snoozedUntil,
         reason: log.reason,
-      });
+      }).select('id').single();
+      if (error) console.warn('saveMedicationLog error:', error);
+      return data?.id || null;
     } catch (e) {
       console.warn('saveMedicationLog error:', e);
+      return null;
     }
   },
 

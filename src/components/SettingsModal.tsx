@@ -172,7 +172,7 @@ export const SettingsModal: React.FC<Props> = ({
               </div>
             )}
 
-            <div className="pt-2 flex items-center justify-between border-t border-slate-700/60 gap-2">
+            <div className="pt-3 flex flex-col gap-2.5 border-t border-slate-700/60">
               {onResetPassword && isSupabaseConfigured && (
                 <button
                   type="button"
@@ -180,7 +180,7 @@ export const SettingsModal: React.FC<Props> = ({
                     onClose();
                     onResetPassword();
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs border border-slate-700 transition cursor-pointer"
+                  className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs border border-slate-700 transition cursor-pointer"
                 >
                   <KeyRound className="w-3.5 h-3.5 text-slate-400" />
                   <span>Change Password</span>
@@ -194,9 +194,9 @@ export const SettingsModal: React.FC<Props> = ({
                     onClose();
                     onSignOut();
                   }}
-                  className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-rose-500/10 text-slate-400 hover:text-rose-300 border border-slate-700 hover:border-rose-500/30 text-xs transition cursor-pointer"
+                  className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-teal-600/40 hover:bg-teal-600/60 text-teal-100 font-semibold border border-teal-500/80 hover:border-teal-400 text-xs transition shadow-md cursor-pointer"
                 >
-                  <LogOut className="w-3.5 h-3.5" />
+                  <LogOut className="w-4 h-4 text-teal-300" />
                   <span>Sign Out</span>
                 </button>
               )}

@@ -50,13 +50,13 @@ function KaliseMainApp() {
 
   // App Navigation & Modals
   const [activeTab, setActiveTab] = useState<TabType>('home');
-  const [settings, setSettings] = useState<UserSettings>(() => storageService.getSettings());
-  const [moods, setMoods] = useState<MoodEntry[]>(() => storageService.getMoods());
-  const [journals, setJournals] = useState<JournalEntry[]>(() => storageService.getJournalEntries());
-  const [affirmations, setAffirmations] = useState<Affirmation[]>(() => storageService.getAffirmations());
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => storageService.getChatHistory());
-  const [medications, setMedications] = useState<Medication[]>(() => storageService.getMedications());
-  const [medicationLogs, setMedicationLogs] = useState<MedicationLog[]>(() => storageService.getMedicationLogs());
+  const [settings, setSettings] = useState<UserSettings>(() => storageService.getSettings(null));
+  const [moods, setMoods] = useState<MoodEntry[]>(() => storageService.getMoods(null));
+  const [journals, setJournals] = useState<JournalEntry[]>(() => storageService.getJournalEntries(null));
+  const [affirmations, setAffirmations] = useState<Affirmation[]>(() => storageService.getAffirmations(null));
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => storageService.getChatHistory(null));
+  const [medications, setMedications] = useState<Medication[]>(() => storageService.getMedications(null));
+  const [medicationLogs, setMedicationLogs] = useState<MedicationLog[]>(() => storageService.getMedicationLogs(null));
 
   const [isMedicationsOpen, setIsMedicationsOpen] = useState(false);
   const [isCrisisModalOpen, setIsCrisisModalOpen] = useState(false);
@@ -65,9 +65,10 @@ function KaliseMainApp() {
   const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false);
   const [isChatLoading, setIsChatLoading] = useState(false);
 
-  // Synchronize user settings when authenticated
+  // Synchronize user settings and authoritative remote data when authenticated
   const loadUserDataForUser = async (user: User) => {
     try {
+      storageService.setUserId(user.id);
       const initialName =
         user.user_metadata?.preferred_name ||
         user.email?.split('@')[0] ||
@@ -96,7 +97,7 @@ function KaliseMainApp() {
       };
 
       setSettings(updatedSettings);
-      storageService.saveSettings(updatedSettings);
+      storageService.saveSettings(updatedSettings, user.id);
       setTheme(userTheme);
 
       // Check onboarding requirement
@@ -106,26 +107,35 @@ function KaliseMainApp() {
         setShowOnboarding(false);
       }
 
-      // Check if remote data exists and sync with local cache
+      // REMOTE DATA IS AUTHORITATIVE (Requirement 4)
       const remoteMoods = await remoteDbService.getMoods(user.id);
-      if (remoteMoods.length > 0) {
-        setMoods(remoteMoods);
-      }
+      setMoods(remoteMoods);
+      storageService.saveMoods(remoteMoods, user.id);
 
       const remoteJournals = await remoteDbService.getJournals(user.id);
-      if (remoteJournals.length > 0) {
-        setJournals(remoteJournals);
-      }
+      setJournals(remoteJournals);
+      storageService.saveJournalEntries(remoteJournals, user.id);
 
       const remoteMeds = await remoteDbService.getMedications(user.id);
-      if (remoteMeds.length > 0) {
-        setMedications(remoteMeds);
-      }
+      setMedications(remoteMeds);
+      storageService.saveMedications(remoteMeds, user.id);
 
       const remoteLogs = await remoteDbService.getMedicationLogs(user.id);
-      if (remoteLogs.length > 0) {
-        setMedicationLogs(remoteLogs);
+      setMedicationLogs(remoteLogs);
+      storageService.saveMedicationLogs(remoteLogs, user.id);
+
+      const remoteFavorites = await remoteDbService.getAffirmationFavorites(user.id);
+      if (remoteFavorites.length > 0) {
+        const affirmationsList = storageService.getAffirmations(user.id);
+        const updatedAffirmations = affirmationsList.map((a) => ({
+          ...a,
+          isFavorite: remoteFavorites.includes(a.id),
+        }));
+        setAffirmations(updatedAffirmations);
       }
+
+      const chatHist = storageService.getChatHistory(user.id);
+      setChatMessages(chatHist);
     } catch (e) {
       console.warn('Could not complete remote data sync:', e);
     }
@@ -136,7 +146,6 @@ function KaliseMainApp() {
     let isMounted = true;
 
     async function initSession() {
-      // If recovery URL, trigger auth view directly
       if (isPasswordRecoveryUrl()) {
         setShowAuthScreen(true);
         setIsAuthChecking(false);
@@ -144,8 +153,6 @@ function KaliseMainApp() {
       }
 
       if (!isSupabaseConfigured) {
-        // Supabase credentials not yet configured
-        // Check if user previously used prototype or show auth
         setIsAuthChecking(false);
         return;
       }
@@ -159,6 +166,7 @@ function KaliseMainApp() {
           await loadUserDataForUser(currentSession.user);
         } else {
           setSession(null);
+          storageService.setUserId(null);
         }
       } catch (err) {
         console.warn('Session restoration failed:', err);
@@ -171,7 +179,6 @@ function KaliseMainApp() {
 
     initSession();
 
-    // Listen to Supabase Auth state changes
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, newSession) => {
       if (!isMounted) return;
       setSession(newSession);
@@ -180,6 +187,7 @@ function KaliseMainApp() {
         setShowAuthScreen(false);
         await loadUserDataForUser(newSession.user);
       } else if (event === 'SIGNED_OUT') {
+        storageService.setUserId(null);
         setShowAuthScreen(true);
         setShowOnboarding(false);
       } else if (event === 'PASSWORD_RECOVERY') {
@@ -193,10 +201,8 @@ function KaliseMainApp() {
     };
   }, []);
 
-  // Latest mood
   const latestMood = useMemo(() => (moods.length > 0 ? moods[0] : undefined), [moods]);
 
-  // Today's featured affirmation based on day of year
   const dailyAffirmation = useMemo(() => {
     if (affirmations.length === 0) {
       return {
@@ -212,10 +218,10 @@ function KaliseMainApp() {
     return affirmations[dayOfYear % affirmations.length];
   }, [affirmations]);
 
-  // Update settings handler
   const handleUpdateSettings = async (newSettings: UserSettings) => {
+    const userId = session?.user?.id || null;
     setSettings(newSettings);
-    storageService.saveSettings(newSettings);
+    storageService.saveSettings(newSettings, userId);
 
     if (session?.user) {
       await remoteDbService.updateProfile(session.user.id, newSettings.userName);
@@ -228,14 +234,20 @@ function KaliseMainApp() {
     }
   };
 
-  // Sign out handler
   const handleSignOut = async () => {
     await authService.signOut();
+    storageService.setUserId(null);
     setSession(null);
+    setMoods(storageService.getMoods(null));
+    setJournals(storageService.getJournalEntries(null));
+    setMedications(storageService.getMedications(null));
+    setMedicationLogs(storageService.getMedicationLogs(null));
+    setChatMessages(storageService.getChatHistory(null));
+    setAffirmations(storageService.getAffirmations(null));
+    setSettings(storageService.getSettings(null));
     setShowAuthScreen(true);
   };
 
-  // Password change / reset request from settings
   const handleRequestPasswordChange = () => {
     if (session?.user?.email) {
       authService.resetPasswordForEmail(session.user.email);
@@ -245,16 +257,16 @@ function KaliseMainApp() {
     }
   };
 
-  // Onboarding completion
   const handleOnboardingComplete = async (goals: string[]) => {
     setShowOnboarding(false);
+    const userId = session?.user?.id || null;
     const updatedSettings = {
       ...settings,
       onboardingCompleted: true,
       onboardingGoals: goals,
     };
     setSettings(updatedSettings);
-    storageService.saveSettings(updatedSettings);
+    storageService.saveSettings(updatedSettings, userId);
 
     if (session?.user) {
       await remoteDbService.savePreferences(session.user.id, {
@@ -264,41 +276,59 @@ function KaliseMainApp() {
     }
   };
 
-  // Mood handlers
+  // Mood handlers with ID reconciliation
   const handleSaveMood = async (entry: Omit<MoodEntry, 'id' | 'timestamp'>) => {
-    const saved = storageService.saveMood(entry);
-    setMoods(storageService.getMoods());
+    const userId = session?.user?.id;
+    const saved = storageService.saveMood(entry, userId);
+    setMoods(storageService.getMoods(userId));
 
     if (session?.user) {
-      await remoteDbService.insertMood(session.user.id, saved);
+      const serverId = await remoteDbService.insertMood(session.user.id, saved);
+      if (serverId && serverId !== saved.id) {
+        const updated = storageService.getMoods(userId).map((m) =>
+          m.id === saved.id ? { ...m, id: serverId } : m
+        );
+        storageService.saveMoods(updated, userId);
+        setMoods(updated);
+      }
     }
   };
 
   const handleDeleteMood = async (id: string) => {
-    storageService.deleteMood(id);
-    setMoods(storageService.getMoods());
+    const userId = session?.user?.id;
+    storageService.deleteMood(id, userId);
+    setMoods(storageService.getMoods(userId));
 
     if (session?.user) {
       await remoteDbService.deleteMood(id, session.user.id);
     }
   };
 
-  // Journal handlers
+  // Journal handlers with ID reconciliation
   const handleSaveJournalEntry = async (
     entry: { title: string; content: string; promptUsed?: string; tags?: string[] },
     id?: string
   ) => {
-    const saved = storageService.saveJournalEntry(entry, id);
-    setJournals(storageService.getJournalEntries());
+    const userId = session?.user?.id;
+    const saved = storageService.saveJournalEntry(entry, id, userId);
+    setJournals(storageService.getJournalEntries(userId));
 
     if (session?.user) {
-      await remoteDbService.saveJournal(session.user.id, saved);
+      const serverId = await remoteDbService.saveJournal(session.user.id, saved);
+      if (serverId && serverId !== saved.id) {
+        const updated = storageService.getJournalEntries(userId).map((j) =>
+          j.id === saved.id ? { ...j, id: serverId } : j
+        );
+        storageService.saveJournalEntries(updated, userId);
+        setJournals(updated);
+      }
     }
   };
 
   const handleDeleteJournalEntry = async (id: string) => {
-    storageService.deleteJournalEntry(id);
-    setJournals(storageService.getJournalEntries());
+    const userId = session?.user?.id;
+    storageService.deleteJournalEntry(id, userId);
+    setJournals(storageService.getJournalEntries(userId));
 
     if (session?.user) {
       await remoteDbService.deleteJournal(id, session.user.id);
@@ -312,7 +342,8 @@ function KaliseMainApp() {
 
   // Affirmation favorites
   const handleToggleAffirmationFavorite = async (id: string) => {
-    const updated = storageService.toggleAffirmationFavorite(id);
+    const userId = session?.user?.id;
+    const updated = storageService.toggleAffirmationFavorite(id, userId);
     setAffirmations(updated);
 
     if (session?.user) {
@@ -327,21 +358,30 @@ function KaliseMainApp() {
     }
   };
 
-  // Medication handlers
+  // Medication handlers with ID reconciliation
   const handleSaveMedication = async (
     med: Omit<Medication, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }
   ) => {
-    const saved = storageService.saveMedication(med);
-    setMedications(storageService.getMedications());
+    const userId = session?.user?.id;
+    const saved = storageService.saveMedication(med, userId);
+    setMedications(storageService.getMedications(userId));
 
     if (session?.user) {
-      await remoteDbService.saveMedication(session.user.id, saved);
+      const serverId = await remoteDbService.saveMedication(session.user.id, saved);
+      if (serverId && serverId !== saved.id) {
+        const updated = storageService.getMedications(userId).map((m) =>
+          m.id === saved.id ? { ...m, id: serverId } : m
+        );
+        storageService.saveMedications(updated, userId);
+        setMedications(updated);
+      }
     }
   };
 
   const handleDeleteMedication = async (id: string) => {
-    storageService.deleteMedication(id);
-    setMedications(storageService.getMedications());
+    const userId = session?.user?.id;
+    storageService.deleteMedication(id, userId);
+    setMedications(storageService.getMedications(userId));
 
     if (session?.user) {
       await remoteDbService.deleteMedication(id, session.user.id);
@@ -349,7 +389,8 @@ function KaliseMainApp() {
   };
 
   const handleToggleMedicationActive = async (id: string) => {
-    const updated = storageService.toggleMedicationActive(id);
+    const userId = session?.user?.id;
+    const updated = storageService.toggleMedicationActive(id, userId);
     setMedications(updated);
 
     if (session?.user) {
@@ -367,6 +408,7 @@ function KaliseMainApp() {
     action: 'taken' | 'skipped' | 'snooze',
     snoozeMinutes?: number
   ) => {
+    const userId = session?.user?.id;
     const now = new Date();
     let status: 'taken' | 'skipped' | 'snoozed' = 'taken';
     let snoozedUntil: string | undefined;
@@ -379,27 +421,38 @@ function KaliseMainApp() {
       snoozedUntil = new Date(now.getTime() + mins * 60000).toISOString();
     }
 
-    const saved = storageService.saveMedicationLog({
-      medicationId: medication.id,
-      medicationName: medication.name,
-      dose: medication.dose,
-      scheduledDate,
-      scheduledTime,
-      status,
-      recordedAt: now.toISOString(),
-      snoozedUntil,
-    });
+    const saved = storageService.saveMedicationLog(
+      {
+        medicationId: medication.id,
+        medicationName: medication.name,
+        dose: medication.dose,
+        scheduledDate,
+        scheduledTime,
+        status,
+        recordedAt: now.toISOString(),
+        snoozedUntil,
+      },
+      userId
+    );
 
-    setMedicationLogs(storageService.getMedicationLogs());
+    setMedicationLogs(storageService.getMedicationLogs(userId));
 
     if (session?.user) {
-      await remoteDbService.saveMedicationLog(session.user.id, saved);
+      const serverId = await remoteDbService.saveMedicationLog(session.user.id, saved);
+      if (serverId && serverId !== saved.id) {
+        const updated = storageService.getMedicationLogs(userId).map((l) =>
+          l.id === saved.id ? { ...l, id: serverId } : l
+        );
+        storageService.saveMedicationLogs(updated, userId);
+        setMedicationLogs(updated);
+      }
     }
   };
 
   const handleDeleteMedicationLog = async (id: string) => {
-    storageService.deleteMedicationLog(id);
-    setMedicationLogs(storageService.getMedicationLogs());
+    const userId = session?.user?.id;
+    storageService.deleteMedicationLog(id, userId);
+    setMedicationLogs(storageService.getMedicationLogs(userId));
 
     if (session?.user) {
       await remoteDbService.deleteMedicationLog(id, session.user.id);
@@ -436,8 +489,9 @@ function KaliseMainApp() {
     return () => clearInterval(checkInterval);
   }, [medications, medicationLogs, settings.medicationRemindersEnabled, settings.notificationPermission]);
 
-  // Chat handlers
+  // Chat handlers with user scoping
   const handleSendMessage = async (text: string) => {
+    const userId = session?.user?.id;
     const userMsg: ChatMessage = {
       id: 'msg-' + Date.now(),
       role: 'user',
@@ -447,9 +501,8 @@ function KaliseMainApp() {
 
     const updatedHistory = [...chatMessages, userMsg];
     setChatMessages(updatedHistory);
-    storageService.saveChatMessage(userMsg);
+    storageService.saveChatMessage(userMsg, userId);
 
-    // Update free message count if free tier
     if (!settings.isPremium) {
       const newSettings = {
         ...settings,
@@ -461,7 +514,9 @@ function KaliseMainApp() {
     setIsChatLoading(true);
 
     try {
-      // NOTE: Medication information is strictly omitted from the AI payload
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+
       const response = await fetch('/api/kalise/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -472,7 +527,9 @@ function KaliseMainApp() {
           energyLevel: latestMood?.energyLevel,
           sleepQuality: latestMood?.sleepQuality,
         }),
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         throw new Error('Chat response was not ok');
@@ -489,7 +546,7 @@ function KaliseMainApp() {
       };
 
       setChatMessages((prev) => [...prev, assistantMsg]);
-      storageService.saveChatMessage(assistantMsg);
+      storageService.saveChatMessage(assistantMsg, userId);
 
       if (data.isCrisis) {
         setCrisisReason(
@@ -507,16 +564,17 @@ function KaliseMainApp() {
         timestamp: new Date().toISOString(),
       };
       setChatMessages((prev) => [...prev, fallbackMsg]);
-      storageService.saveChatMessage(fallbackMsg);
+      storageService.saveChatMessage(fallbackMsg, userId);
     } finally {
       setIsChatLoading(false);
     }
   };
 
   const handleClearChat = () => {
+    const userId = session?.user?.id;
     if (window.confirm('Do you want to clear your current conversation with Kalise?')) {
-      storageService.clearChat();
-      setChatMessages(storageService.getChatHistory());
+      storageService.clearChat(userId);
+      setChatMessages(storageService.getChatHistory(userId));
     }
   };
 
@@ -530,7 +588,6 @@ function KaliseMainApp() {
     handleSendMessage("Hey Kalise, I'm checking in. How do we start today's reflection?");
   };
 
-  // 1. Session Restoration Loading Screen (no flashing)
   if (isAuthChecking) {
     return (
       <div className="min-h-screen bg-[#090d16] text-slate-100 flex flex-col items-center justify-center p-4">
@@ -544,7 +601,6 @@ function KaliseMainApp() {
     );
   }
 
-  // 2. Authentication Screen (when not logged in or explicitly prompted)
   if ((!session && isSupabaseConfigured) || showAuthScreen) {
     return (
       <AuthView
@@ -562,7 +618,6 @@ function KaliseMainApp() {
     );
   }
 
-  // 3. Onboarding Flow (new accounts)
   if (showOnboarding) {
     return (
       <OnboardingFlow
@@ -572,13 +627,10 @@ function KaliseMainApp() {
     );
   }
 
-  // 4. Main Kalise Application
   return (
     <div className="min-h-screen bg-[#090d16] text-slate-100 flex flex-col font-sans selection:bg-teal-500/20 selection:text-teal-200">
-      {/* Offline Alert */}
       <OfflineIndicator />
 
-      {/* Top Header */}
       <Header
         onOpenSettings={() => setIsSettingsModalOpen(true)}
         onOpenCrisis={() => handleOpenCrisisModal()}
@@ -587,7 +639,6 @@ function KaliseMainApp() {
         settings={settings}
       />
 
-      {/* Main Container constrained for mobile-first feel */}
       <main className="flex-1 w-full max-w-lg mx-auto px-4 pt-2">
         {activeTab === 'home' && (
           <HomeDashboard
@@ -643,10 +694,8 @@ function KaliseMainApp() {
         )}
       </main>
 
-      {/* Bottom Navigation */}
       <Navigation activeTab={activeTab} onChangeTab={setActiveTab} />
 
-      {/* Medications Modal / View */}
       {isMedicationsOpen && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/95 backdrop-blur-md p-4 animate-in fade-in duration-200">
           <div className="max-w-lg mx-auto">
@@ -666,7 +715,6 @@ function KaliseMainApp() {
         </div>
       )}
 
-      {/* Modals */}
       <CrisisModal
         isOpen={isCrisisModalOpen}
         onClose={() => setIsCrisisModalOpen(false)}

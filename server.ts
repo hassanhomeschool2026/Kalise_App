@@ -105,14 +105,20 @@ function generateLocalKaliseResponse(userMessage: string, history: Array<{ role:
     return "I can help you keep track of what happened, but because I am an AI, I cannot advise whether you should take an extra dose or change your schedule. The safest next step is to check your medication's official instructions or contact your pharmacist or prescribing doctor. Would you like me to help you log this in your personal notes?";
   }
 
+  if (lower.includes('racing') || lower.includes('thoughts') || lower.includes('mind') || lower.includes('sleep') || lower.includes('night')) {
+    return "Racing thoughts at night can feel so loud and overwhelming when everything else gets quiet. Let's try to gently anchor ourselves right here. What is one thought or worry taking up the most space in your mind right now?";
+  }
+  if (lower.includes('todo') || lower.includes('manage') || lower.includes('lot to do') || lower.includes('overwhelmed') || lower.includes('busy')) {
+    return "When there is so much to manage, it's completely natural to feel a heavy sense of paralysis. You don't have to figure out or solve everything today. If you could set down just one of those demands for tonight, which one would feel like the biggest relief?";
+  }
+  if (lower.includes('frustrated') || lower.includes('depends') || lower.includes('responsibility') || lower.includes('alone') || lower.includes('heavy')) {
+    return "Carrying the weight of feeling like everything depends on you is exhausting. It is completely valid to feel frustrated when support feels out of reach. What would it look like to give yourself permission to drop the heavy mantle of responsibility, even just for the next hour?";
+  }
   if (lower.includes('anxious') || lower.includes('anxiety') || lower.includes('panic') || lower.includes('worry')) {
     return "Anxiety can feel so physically heavy in the chest and shoulders. Before we try to untangle the thoughts, take a slow breath with me. What is the loudest thing your mind is trying to convince you of right now?";
   }
   if (lower.includes('tired') || lower.includes('exhausted') || lower.includes('burnout') || lower.includes('drained')) {
     return "It sounds like you've been carrying a tremendous mental load for a while. Sometimes exhaustion is our mind's way of asking for permission to just stop trying to fix everything today. What would feeling truly rested look like for you tonight?";
-  }
-  if (lower.includes('alone') || lower.includes('lonely') || lower.includes('nobody')) {
-    return "Feeling lonely is one of the most painful human experiences, especially when you're surrounded by people who don't quite understand what's happening beneath the surface. I'm here with you. When did this feeling start settling in today?";
   }
   if (lower.includes('work') || lower.includes('job') || lower.includes('boss') || lower.includes('career')) {
     return "Work stress has a way of invading every corner of our personal peace. Are you feeling frustrated with an interaction, overloaded with demands, or feeling like your effort isn't recognized?";
@@ -124,7 +130,14 @@ function generateLocalKaliseResponse(userMessage: string, history: Array<{ role:
     return "Hello. I'm glad you took a moment for yourself today. How is your mind and body feeling right now?";
   }
 
-  return "I hear you. Thank you for sharing that with me. It takes real honesty to pause and put words to what you're experiencing. What part of this feels the most pressing or tender for you right now?";
+  const fallbacks = [
+    "Thank you for sharing that with me. It takes real courage to put words to what you're experiencing. How is sitting with that feeling right now?",
+    "I hear how much weight you're carrying in this moment. What feels like the tenderest part of this situation for you?",
+    "That sounds genuinely challenging to navigate. When you notice this coming up, where do you feel it most in your body?",
+    "I'm right here listening. If you could wave a magic wand and change one aspect of how today went, what would it be?"
+  ];
+  const index = Math.abs(userMessage.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % fallbacks.length;
+  return fallbacks[index];
 }
 
 // Chat API endpoint
@@ -173,15 +186,29 @@ app.post('/api/kalise/chat', async (req: Request, res: Response) => {
           ? `${KALISE_SYSTEM_INSTRUCTION}\n\nCurrent User Context: ${contextualPrompt}`
           : KALISE_SYSTEM_INSTRUCTION;
 
-        const response = await aiClient.models.generateContent({
+        const history = messages.slice(0, -1).map((m: { role: string; content: string }) => ({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: m.content }],
+        }));
+
+        const chat = aiClient.chats.create({
           model: GEMINI_MODEL,
-          contents: formattedContents,
+          history,
           config: {
             systemInstruction,
             temperature: 0.7,
             topP: 0.9,
           },
         });
+
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Gemini API timeout')), 10000)
+        );
+
+        const response = await Promise.race([
+          chat.sendMessage({ message: userText }),
+          timeoutPromise,
+        ]) as any;
 
         const rawReply = response.text || "I'm right here with you. Let's take this one moment at a time.";
         const reply = rawReply.replace(/—/g, ' - ');

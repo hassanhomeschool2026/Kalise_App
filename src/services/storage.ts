@@ -10,13 +10,13 @@ import {
 import { INITIAL_AFFIRMATIONS } from './affirmationsData';
 
 const STORAGE_KEYS = {
-  MOODS: 'kalise_mood_entries_v1',
-  JOURNAL: 'kalise_journal_entries_v1',
-  AFFIRMATIONS: 'kalise_affirmations_v1',
-  CHAT: 'kalise_chat_history_v1',
-  SETTINGS: 'kalise_user_settings_v1',
-  MEDICATIONS: 'kalise_medications_v1',
-  MEDICATION_LOGS: 'kalise_medication_logs_v1',
+  MOODS: 'kalise_mood_entries',
+  JOURNAL: 'kalise_journal_entries',
+  AFFIRMATIONS: 'kalise_affirmations',
+  CHAT: 'kalise_chat_history',
+  SETTINGS: 'kalise_user_settings',
+  MEDICATIONS: 'kalise_medications',
+  MEDICATION_LOGS: 'kalise_medication_logs',
 };
 
 const DEFAULT_SETTINGS: UserSettings = {
@@ -76,51 +76,6 @@ const SEED_MOODS: MoodEntry[] = [
     note: 'Long week at work. Slowing down this evening to reset and hydrate.',
     timestamp: new Date(Date.now() - 1000 * 60 * 60 * 28).toISOString(),
   },
-  {
-    id: 'seed-mood-3',
-    level: 'low',
-    score: 2,
-    label: 'Low',
-    emotions: ['Exhausted', 'Overwhelmed'],
-    influences: ['Work & Career', 'Sleep Quality'],
-    energyLevel: 'low',
-    energyScore: 2,
-    sleepQuality: 'poor',
-    sleepHours: 5.0,
-    thoughtBehaviors: ['Racing thoughts', 'Restless'],
-    note: 'Slept poorly and felt the weight of multiple pending deadlines today.',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 52).toISOString(),
-  },
-  {
-    id: 'seed-mood-4',
-    level: 'good',
-    score: 4,
-    label: 'Good',
-    emotions: ['Grounded', 'Peaceful', 'Content'],
-    influences: ['Relationships', 'Solitude & Quiet'],
-    energyLevel: 'typical',
-    energyScore: 3,
-    sleepQuality: 'good',
-    sleepHours: 8.0,
-    thoughtBehaviors: ['Calm', 'Felt in control'],
-    note: 'Had a comforting chat with an old friend and spent the evening reading.',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 76).toISOString(),
-  },
-  {
-    id: 'seed-mood-5',
-    level: 'okay',
-    score: 3,
-    label: 'Okay',
-    emotions: ['Reflective', 'Restless'],
-    influences: ['Daily Routine'],
-    energyLevel: 'high',
-    energyScore: 4,
-    sleepQuality: 'okay',
-    sleepHours: 6.5,
-    thoughtBehaviors: ['Motivated', 'Restless'],
-    note: 'Felt lots of physical energy but needed to direct it into something constructive.',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 102).toISOString(),
-  },
 ];
 
 const SEED_JOURNAL: JournalEntry[] = [
@@ -136,76 +91,113 @@ const SEED_JOURNAL: JournalEntry[] = [
 ];
 
 export const storageService = {
-  getSettings(): UserSettings {
+  currentUserId: null as string | null,
+
+  setUserId(userId: string | null) {
+    this.currentUserId = userId;
+  },
+
+  getKey(baseKey: string, userId?: string | null): string {
+    const uid = userId !== undefined ? userId : this.currentUserId;
+    return uid ? `${baseKey}_v1_${uid}` : `${baseKey}_v1_guest`;
+  },
+
+  getSettings(userId?: string | null): UserSettings {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+      const key = this.getKey(STORAGE_KEYS.SETTINGS, userId);
+      const data = localStorage.getItem(key);
       return data ? { ...DEFAULT_SETTINGS, ...JSON.parse(data) } : DEFAULT_SETTINGS;
     } catch {
       return DEFAULT_SETTINGS;
     }
   },
 
-  saveSettings(settings: UserSettings): void {
+  saveSettings(settings: UserSettings, userId?: string | null): void {
     try {
-      localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+      const key = this.getKey(STORAGE_KEYS.SETTINGS, userId);
+      localStorage.setItem(key, JSON.stringify(settings));
     } catch (e) {
       console.error('Failed to save settings to localStorage', e);
     }
   },
 
-  getMoods(): MoodEntry[] {
+  getMoods(userId?: string | null): MoodEntry[] {
+    const isAuth = userId !== undefined ? Boolean(userId) : Boolean(this.currentUserId);
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.MOODS);
+      const key = this.getKey(STORAGE_KEYS.MOODS, userId);
+      const data = localStorage.getItem(key);
       if (!data) {
-        localStorage.setItem(STORAGE_KEYS.MOODS, JSON.stringify(SEED_MOODS));
-        return SEED_MOODS;
+        if (!isAuth) {
+          localStorage.setItem(key, JSON.stringify(SEED_MOODS));
+          return SEED_MOODS;
+        }
+        return [];
       }
       return JSON.parse(data);
     } catch {
-      return SEED_MOODS;
+      return isAuth ? [] : SEED_MOODS;
     }
   },
 
-  saveMood(entry: Omit<MoodEntry, 'id' | 'timestamp'>): MoodEntry {
-    const moods = this.getMoods();
+  saveMoods(moods: MoodEntry[], userId?: string | null): void {
+    try {
+      const key = this.getKey(STORAGE_KEYS.MOODS, userId);
+      localStorage.setItem(key, JSON.stringify(moods));
+    } catch (e) {
+      console.error('Failed to save moods', e);
+    }
+  },
+
+  saveMood(entry: Omit<MoodEntry, 'id' | 'timestamp'>, userId?: string | null): MoodEntry {
+    const moods = this.getMoods(userId);
     const newEntry: MoodEntry = {
       ...entry,
       id: 'mood-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7),
       timestamp: new Date().toISOString(),
     };
     const updated = [newEntry, ...moods];
-    try {
-      localStorage.setItem(STORAGE_KEYS.MOODS, JSON.stringify(updated));
-    } catch (e) {
-      console.error('Failed to save mood entry', e);
-    }
+    this.saveMoods(updated, userId);
     return newEntry;
   },
 
-  deleteMood(id: string): void {
-    const moods = this.getMoods().filter((m) => m.id !== id);
-    try {
-      localStorage.setItem(STORAGE_KEYS.MOODS, JSON.stringify(moods));
-    } catch (e) {
-      console.error('Failed to delete mood', e);
-    }
+  deleteMood(id: string, userId?: string | null): void {
+    const moods = this.getMoods(userId).filter((m) => m.id !== id);
+    this.saveMoods(moods, userId);
   },
 
-  getJournalEntries(): JournalEntry[] {
+  getJournalEntries(userId?: string | null): JournalEntry[] {
+    const isAuth = userId !== undefined ? Boolean(userId) : Boolean(this.currentUserId);
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.JOURNAL);
+      const key = this.getKey(STORAGE_KEYS.JOURNAL, userId);
+      const data = localStorage.getItem(key);
       if (!data) {
-        localStorage.setItem(STORAGE_KEYS.JOURNAL, JSON.stringify(SEED_JOURNAL));
-        return SEED_JOURNAL;
+        if (!isAuth) {
+          localStorage.setItem(key, JSON.stringify(SEED_JOURNAL));
+          return SEED_JOURNAL;
+        }
+        return [];
       }
       return JSON.parse(data);
     } catch {
-      return SEED_JOURNAL;
+      return isAuth ? [] : SEED_JOURNAL;
     }
   },
 
-  saveJournalEntry(entry: { title: string; content: string; promptUsed?: string; tags?: string[] }, existingId?: string): JournalEntry {
-    const list = this.getJournalEntries();
+  saveJournalEntries(entries: JournalEntry[], userId?: string | null): void {
+    try {
+      const key = this.getKey(STORAGE_KEYS.JOURNAL, userId);
+      localStorage.setItem(key, JSON.stringify(entries));
+    } catch (e) {
+      console.error('Failed to save journal entries', e);
+    }
+  },
+
+  saveJournalEntry(
+    entry: { title: string; content: string; promptUsed?: string; tags?: string[] },
+    existingId?: string,
+    userId?: string | null
+  ): JournalEntry {
+    const list = this.getJournalEntries(userId);
     const now = new Date().toISOString();
 
     if (existingId) {
@@ -218,11 +210,7 @@ export const storageService = {
             }
           : item
       );
-      try {
-        localStorage.setItem(STORAGE_KEYS.JOURNAL, JSON.stringify(updated));
-      } catch (e) {
-        console.error('Failed to update journal entry', e);
-      }
+      this.saveJournalEntries(updated, userId);
       return updated.find((i) => i.id === existingId)!;
     } else {
       const newEntry: JournalEntry = {
@@ -235,29 +223,22 @@ export const storageService = {
         updatedAt: now,
       };
       const updated = [newEntry, ...list];
-      try {
-        localStorage.setItem(STORAGE_KEYS.JOURNAL, JSON.stringify(updated));
-      } catch (e) {
-        console.error('Failed to save journal entry', e);
-      }
+      this.saveJournalEntries(updated, userId);
       return newEntry;
     }
   },
 
-  deleteJournalEntry(id: string): void {
-    const updated = this.getJournalEntries().filter((item) => item.id !== id);
-    try {
-      localStorage.setItem(STORAGE_KEYS.JOURNAL, JSON.stringify(updated));
-    } catch (e) {
-      console.error('Failed to delete journal entry', e);
-    }
+  deleteJournalEntry(id: string, userId?: string | null): void {
+    const updated = this.getJournalEntries(userId).filter((item) => item.id !== id);
+    this.saveJournalEntries(updated, userId);
   },
 
-  getAffirmations(): Affirmation[] {
+  getAffirmations(userId?: string | null): Affirmation[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.AFFIRMATIONS);
+      const key = this.getKey(STORAGE_KEYS.AFFIRMATIONS, userId);
+      const data = localStorage.getItem(key);
       if (!data) {
-        localStorage.setItem(STORAGE_KEYS.AFFIRMATIONS, JSON.stringify(INITIAL_AFFIRMATIONS));
+        localStorage.setItem(key, JSON.stringify(INITIAL_AFFIRMATIONS));
         return INITIAL_AFFIRMATIONS;
       }
       return JSON.parse(data);
@@ -266,20 +247,22 @@ export const storageService = {
     }
   },
 
-  toggleAffirmationFavorite(id: string): Affirmation[] {
-    const list = this.getAffirmations();
+  toggleAffirmationFavorite(id: string, userId?: string | null): Affirmation[] {
+    const list = this.getAffirmations(userId);
     const updated = list.map((a) => (a.id === id ? { ...a, isFavorite: !a.isFavorite } : a));
     try {
-      localStorage.setItem(STORAGE_KEYS.AFFIRMATIONS, JSON.stringify(updated));
+      const key = this.getKey(STORAGE_KEYS.AFFIRMATIONS, userId);
+      localStorage.setItem(key, JSON.stringify(updated));
     } catch (e) {
       console.error('Failed to update favorite', e);
     }
     return updated;
   },
 
-  getChatHistory(): ChatMessage[] {
+  getChatHistory(userId?: string | null): ChatMessage[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.CHAT);
+      const key = this.getKey(STORAGE_KEYS.CHAT, userId);
+      const data = localStorage.getItem(key);
       if (!data) {
         const welcomeMessage: ChatMessage = {
           id: 'welcome-1',
@@ -287,7 +270,9 @@ export const storageService = {
           content: "Welcome. I'm Kalise, your companion for emotional reflection and decompression. Whatever is on your mind, big or small, this is a nonjudgmental space to slow down and talk through it. How are you feeling today?",
           timestamp: new Date().toISOString(),
         };
-        return [welcomeMessage];
+        const initialChat = [welcomeMessage];
+        localStorage.setItem(key, JSON.stringify(initialChat));
+        return initialChat;
       }
       return JSON.parse(data);
     } catch {
@@ -295,42 +280,62 @@ export const storageService = {
     }
   },
 
-  saveChatMessage(message: ChatMessage): void {
-    const history = this.getChatHistory();
-    const updated = [...history, message];
+  saveChatHistory(history: ChatMessage[], userId?: string | null): void {
     try {
-      localStorage.setItem(STORAGE_KEYS.CHAT, JSON.stringify(updated));
+      const key = this.getKey(STORAGE_KEYS.CHAT, userId);
+      localStorage.setItem(key, JSON.stringify(history));
     } catch (e) {
-      console.error('Failed to save chat message', e);
+      console.error('Failed to save chat history', e);
     }
   },
 
-  clearChat(): void {
+  saveChatMessage(message: ChatMessage, userId?: string | null): void {
+    const history = this.getChatHistory(userId);
+    const updated = [...history, message];
+    this.saveChatHistory(updated, userId);
+  },
+
+  clearChat(userId?: string | null): void {
     try {
-      localStorage.removeItem(STORAGE_KEYS.CHAT);
+      const key = this.getKey(STORAGE_KEYS.CHAT, userId);
+      localStorage.removeItem(key);
     } catch (e) {
       console.error('Failed to clear chat', e);
     }
   },
 
-  // Medication CRUD
-  getMedications(): Medication[] {
+  getMedications(userId?: string | null): Medication[] {
+    const isAuth = userId !== undefined ? Boolean(userId) : Boolean(this.currentUserId);
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.MEDICATIONS);
+      const key = this.getKey(STORAGE_KEYS.MEDICATIONS, userId);
+      const data = localStorage.getItem(key);
       if (!data) {
-        localStorage.setItem(STORAGE_KEYS.MEDICATIONS, JSON.stringify(SEED_MEDICATIONS));
-        return SEED_MEDICATIONS;
+        if (!isAuth) {
+          localStorage.setItem(key, JSON.stringify(SEED_MEDICATIONS));
+          return SEED_MEDICATIONS;
+        }
+        return [];
       }
       return JSON.parse(data);
     } catch {
-      return SEED_MEDICATIONS;
+      return isAuth ? [] : SEED_MEDICATIONS;
+    }
+  },
+
+  saveMedications(meds: Medication[], userId?: string | null): void {
+    try {
+      const key = this.getKey(STORAGE_KEYS.MEDICATIONS, userId);
+      localStorage.setItem(key, JSON.stringify(meds));
+    } catch (e) {
+      console.error('Failed to save medications', e);
     }
   },
 
   saveMedication(
-    med: Omit<Medication, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }
+    med: Omit<Medication, 'id' | 'createdAt' | 'updatedAt'> & { id?: string },
+    userId?: string | null
   ): Medication {
-    const list = this.getMedications();
+    const list = this.getMedications(userId);
     const now = new Date().toISOString();
 
     if (med.id) {
@@ -343,11 +348,7 @@ export const storageService = {
             }
           : item
       );
-      try {
-        localStorage.setItem(STORAGE_KEYS.MEDICATIONS, JSON.stringify(updatedList));
-      } catch (e) {
-        console.error('Failed to update medication', e);
-      }
+      this.saveMedications(updatedList, userId);
       return updatedList.find((i) => i.id === med.id)!;
     }
 
@@ -358,39 +359,27 @@ export const storageService = {
       updatedAt: now,
     };
     const updatedList = [newMed, ...list];
-    try {
-      localStorage.setItem(STORAGE_KEYS.MEDICATIONS, JSON.stringify(updatedList));
-    } catch (e) {
-      console.error('Failed to save medication', e);
-    }
+    this.saveMedications(updatedList, userId);
     return newMed;
   },
 
-  deleteMedication(id: string): void {
-    const list = this.getMedications();
+  deleteMedication(id: string, userId?: string | null): void {
+    const list = this.getMedications(userId);
     const updated = list.filter((m) => m.id !== id);
-    try {
-      localStorage.setItem(STORAGE_KEYS.MEDICATIONS, JSON.stringify(updated));
-    } catch (e) {
-      console.error('Failed to delete medication', e);
-    }
+    this.saveMedications(updated, userId);
   },
 
-  toggleMedicationActive(id: string): Medication[] {
-    const list = this.getMedications();
+  toggleMedicationActive(id: string, userId?: string | null): Medication[] {
+    const list = this.getMedications(userId);
     const updated = list.map((m) => (m.id === id ? { ...m, active: !m.active, updatedAt: new Date().toISOString() } : m));
-    try {
-      localStorage.setItem(STORAGE_KEYS.MEDICATIONS, JSON.stringify(updated));
-    } catch (e) {
-      console.error('Failed to toggle medication active state', e);
-    }
+    this.saveMedications(updated, userId);
     return updated;
   },
 
-  // Medication Logs
-  getMedicationLogs(): MedicationLog[] {
+  getMedicationLogs(userId?: string | null): MedicationLog[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.MEDICATION_LOGS);
+      const key = this.getKey(STORAGE_KEYS.MEDICATION_LOGS, userId);
+      const data = localStorage.getItem(key);
       if (!data) {
         return [];
       }
@@ -400,19 +389,23 @@ export const storageService = {
     }
   },
 
-  saveMedicationLog(log: Omit<MedicationLog, 'id'> & { id?: string }): MedicationLog {
-    const list = this.getMedicationLogs();
+  saveMedicationLogs(logs: MedicationLog[], userId?: string | null): void {
+    try {
+      const key = this.getKey(STORAGE_KEYS.MEDICATION_LOGS, userId);
+      localStorage.setItem(key, JSON.stringify(logs));
+    } catch (e) {
+      console.error('Failed to save medication logs', e);
+    }
+  },
+
+  saveMedicationLog(log: Omit<MedicationLog, 'id'> & { id?: string }, userId?: string | null): MedicationLog {
+    const list = this.getMedicationLogs(userId);
     if (log.id) {
       const updatedList = list.map((item) => (item.id === log.id ? { ...item, ...log } : item));
-      try {
-        localStorage.setItem(STORAGE_KEYS.MEDICATION_LOGS, JSON.stringify(updatedList));
-      } catch (e) {
-        console.error('Failed to update medication log', e);
-      }
+      this.saveMedicationLogs(updatedList, userId);
       return updatedList.find((i) => i.id === log.id)!;
     }
 
-    // Check if an existing log exists for this medication, scheduledDate, and scheduledTime
     const existingIndex = list.findIndex(
       (item) =>
         item.medicationId === log.medicationId &&
@@ -427,11 +420,7 @@ export const storageService = {
       };
       const updatedList = [...list];
       updatedList[existingIndex] = updatedItem;
-      try {
-        localStorage.setItem(STORAGE_KEYS.MEDICATION_LOGS, JSON.stringify(updatedList));
-      } catch (e) {
-        console.error('Failed to update existing medication log', e);
-      }
+      this.saveMedicationLogs(updatedList, userId);
       return updatedItem;
     }
 
@@ -440,39 +429,34 @@ export const storageService = {
       id: 'medlog-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7),
     };
     const updatedList = [newLog, ...list];
-    try {
-      localStorage.setItem(STORAGE_KEYS.MEDICATION_LOGS, JSON.stringify(updatedList));
-    } catch (e) {
-      console.error('Failed to save medication log', e);
-    }
+    this.saveMedicationLogs(updatedList, userId);
     return newLog;
   },
 
-  deleteMedicationLog(id: string): void {
-    const list = this.getMedicationLogs();
+  deleteMedicationLog(id: string, userId?: string | null): void {
+    const list = this.getMedicationLogs(userId);
     const updated = list.filter((l) => l.id !== id);
-    try {
-      localStorage.setItem(STORAGE_KEYS.MEDICATION_LOGS, JSON.stringify(updated));
-    } catch (e) {
-      console.error('Failed to delete medication log', e);
-    }
+    this.saveMedicationLogs(updated, userId);
   },
 
-  exportAllData(): string {
+  exportAllData(userId?: string | null): string {
     const data = {
-      settings: this.getSettings(),
-      moods: this.getMoods(),
-      journal: this.getJournalEntries(),
-      affirmations: this.getAffirmations(),
-      medications: this.getMedications(),
-      medicationLogs: this.getMedicationLogs(),
-      chatHistory: this.getChatHistory(),
+      settings: this.getSettings(userId),
+      moods: this.getMoods(userId),
+      journal: this.getJournalEntries(userId),
+      affirmations: this.getAffirmations(userId),
+      medications: this.getMedications(userId),
+      medicationLogs: this.getMedicationLogs(userId),
+      chatHistory: this.getChatHistory(userId),
       exportedAt: new Date().toISOString(),
     };
     return JSON.stringify(data, null, 2);
   },
 
-  resetAllData(): void {
-    Object.values(STORAGE_KEYS).forEach((k) => localStorage.removeItem(k));
+  resetAllData(userId?: string | null): void {
+    Object.values(STORAGE_KEYS).forEach((k) => {
+      const key = this.getKey(k, userId);
+      localStorage.removeItem(key);
+    });
   },
 };
