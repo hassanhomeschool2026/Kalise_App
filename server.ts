@@ -187,11 +187,13 @@ app.post('/api/kalise/chat', async (req: Request, res: Response) => {
     const reply = rawReply.replace(/—/g, ' - ');
     res.json({ reply, isCrisis: false, model: OPENAI_MODEL });
   } catch (error: unknown) {
-    const errStr = error instanceof Error ? error.message : String(error);
-    console.error('Error handling Kalise chat request:', errStr);
+    const err = error as any;
+    const errStr = err instanceof Error ? err.message : String(err);
+    const isAbort = err?.name === 'AbortError' || errStr.includes('aborted') || errStr.includes('timeout');
+    console.error('Error handling Kalise chat request:', isAbort ? 'Request timed out' : 'AI generation error');
     res.status(503).json({
       error: 'AI_UNAVAILABLE',
-      message: errStr.includes('timeout') ? 'The request timed out. Please retry.' : 'Unable to process conversation at this time. Please check API key and network connection.',
+      message: isAbort ? 'The request timed out. Please retry.' : 'Unable to process conversation at this time. Please check API key and network connection.',
     });
   }
 });
@@ -220,14 +222,14 @@ app.get('/api/ai/test', async (_req: Request, res: Response) => {
       reply: (testResponse as any).output_text?.trim(),
       message: 'OpenAI API connection verified successfully.',
     });
-  } catch (err: unknown) {
-    const errorMessage = err instanceof Error ? err.message : String(err);
+  } catch (_err: unknown) {
+    console.error('OpenAI API test failed');
     res.status(500).json({
       configured: true,
       success: false,
       model: OPENAI_MODEL,
-      error: errorMessage,
-      message: 'OpenAI API call failed.',
+      error: 'API call failed',
+      message: 'OpenAI API test connection failed.',
     });
   }
 });

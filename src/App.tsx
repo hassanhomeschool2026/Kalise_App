@@ -531,25 +531,33 @@ function KaliseMainApp() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s frontend timeout
 
-      const response = await fetch('/api/kalise/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: updatedHistory.map((m) => ({ role: m.role, content: m.content })),
-          currentMood: latestMood?.label,
-          energyLevel: latestMood?.energyLevel,
-          sleepQuality: latestMood?.sleepQuality,
-          moods: storageService.getMoods(userId),
-          companionMode,
-        }),
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
+      let response: Response;
+      try {
+        response = await fetch('/api/kalise/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: updatedHistory.map((m) => ({ role: m.role, content: m.content })),
+            currentMood: latestMood?.label,
+            energyLevel: latestMood?.energyLevel,
+            sleepQuality: latestMood?.sleepQuality,
+            moods: storageService.getMoods(userId),
+            companionMode,
+          }),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       const data = await response.json();
 
       if (!response.ok) {
         throw new Error(data.message || data.error || 'Chat response was not ok');
+      }
+
+      if (!data.reply || typeof data.reply !== 'string' || !data.reply.trim()) {
+        throw new Error(data.message || 'AI returned no valid response text.');
       }
 
       // Successful response: increment free messages if not premium
@@ -564,7 +572,7 @@ function KaliseMainApp() {
       const assistantMsg: ChatMessage = {
         id: 'msg-' + Date.now() + 1,
         role: 'assistant',
-        content: data.reply || "I'm here with you. Take a quiet breath.",
+        content: data.reply,
         timestamp: new Date().toISOString(),
         isCrisis: data.isCrisis,
       };
@@ -579,7 +587,9 @@ function KaliseMainApp() {
         setIsCrisisModalOpen(true);
       }
     } catch (err: any) {
-      const errMsg = err.name === 'AbortError' ? 'The request timed out. Please check your connection and retry.' : (err.message || 'Failed to communicate with Kalise server.');
+      const errMsg = err.name === 'AbortError' || err.message?.includes('aborted')
+        ? 'The request timed out. Please check your connection and retry.'
+        : (err.message || 'Failed to communicate with Kalise server.');
       console.error('Failed to communicate with Kalise server:', err);
       setChatError(errMsg);
       setLastFailedMessage({ text, mode: companionMode });
@@ -591,6 +601,12 @@ function KaliseMainApp() {
 
   const handleRetryLastMessage = async () => {
     if (!lastFailedMessage || inFlightRef.current) return;
+    const lastMsg = chatMessages[chatMessages.length - 1];
+    if (!lastMsg || lastMsg.role !== 'user' || lastMsg.content !== lastFailedMessage.text) {
+      setChatError('Could not verify last message for retry. Please send your message again.');
+      setLastFailedMessage(null);
+      return;
+    }
     await handleSendMessage(lastFailedMessage.text, lastFailedMessage.mode, true);
   };
 
