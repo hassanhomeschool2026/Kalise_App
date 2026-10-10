@@ -2,7 +2,7 @@ import express, { Request, Response } from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
-import { GoogleGenAI } from '@google/genai';
+import OpenAI from 'openai';
 import { analyzePatterns, selectRelevantPatterns } from './src/utils/patternEngine.js';
 
 dotenv.config();
@@ -15,20 +15,13 @@ const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json());
 
-// Initialize Google GenAI if key is present
-const geminiApiKey = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-let aiClient: GoogleGenAI | null = null;
+// Initialize OpenAI client if key is present
+const openAiApiKey = process.env.OPENAI_API_KEY;
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+let openAiClient: OpenAI | null = null;
 
-if (geminiApiKey) {
-  aiClient = new GoogleGenAI({
-    apiKey: geminiApiKey,
-    httpOptions: {
-      headers: {
-        'User-Agent': 'aistudio-build',
-      },
-    },
-  });
+if (openAiApiKey) {
+  openAiClient = new OpenAI({ apiKey: openAiApiKey });
 }
 
 // Crisis keyword and intent screening
@@ -87,54 +80,7 @@ const CRISIS_RESPONSE = {
   },
 };
 
-// Fallback intelligent responses if API key is temporarily unavailable or offline
-function generateLocalKaliseResponse(userMessage: string, history: Array<{ role: string; content: string }>): string {
-  const lower = userMessage.toLowerCase();
-
-  // Medication missed dose inquiry guard
-  if (
-    (lower.includes('forgot') || lower.includes('missed')) &&
-    (lower.includes('med') || lower.includes('dose') || lower.includes('pill') || lower.includes('prescription'))
-  ) {
-    return "I can help you keep track of what happened, but because I am an AI, I cannot advise whether you should take an extra dose or change your schedule. The safest next step is to check your medication's official instructions or contact your pharmacist or prescribing doctor. Would you like me to help you log this in your personal notes?";
-  }
-
-  if (lower.includes('racing') || lower.includes('thoughts') || lower.includes('mind') || lower.includes('sleep') || lower.includes('night')) {
-    return "Racing thoughts at night can feel loud and overwhelming when everything else gets quiet. Let's trace this back. What is one specific thought or worry taking up the most space right now?";
-  }
-  if (lower.includes('todo') || lower.includes('manage') || lower.includes('lot to do') || lower.includes('overwhelmed') || lower.includes('busy')) {
-    return "When everything piles up at once, the sheer volume makes it exhausting even to decide where to look. You don't have to sort it all out this second.";
-  }
-  if (lower.includes('frustrated') || lower.includes('depends') || lower.includes('responsibility') || lower.includes('alone') || lower.includes('heavy')) {
-    return "That makes complete sense. When you're carrying the weight of multiple responsibilities without backup, the frustration is a natural response to an impossible load.";
-  }
-  if (lower.includes('anxious') || lower.includes('anxiety') || lower.includes('panic') || lower.includes('worry')) {
-    return "Anxiety has a way of making every future scenario feel urgent right now. Let's keep it grounded in what is actually happening in front of you today.";
-  }
-  if (lower.includes('tired') || lower.includes('exhausted') || lower.includes('burnout') || lower.includes('drained')) {
-    return "Exhaustion makes everything harder to process. When you're running on empty, even small demands feel heavy.";
-  }
-  if (lower.includes('work') || lower.includes('job') || lower.includes('boss') || lower.includes('career')) {
-    return "Work stress can wear you down quickly, especially when expectations keep shifting.";
-  }
-  if (lower.includes('boundary') || lower.includes('guilt') || lower.includes('saying no')) {
-    return "Setting boundaries often brings up guilt when you're used to keeping the peace and absorbing everyone else's friction.";
-  }
-  if (lower.includes('hello') || lower.includes('hi') || lower.includes('hey')) {
-    return "Hello. What's on your mind today?";
-  }
-
-  const fallbacks = [
-    "I'm listening. What's the main thing on your mind right now?",
-    "What part of this situation feels the most pressing for you right now?",
-    "Let's talk about what's going on. What happened just before you started noticing this?",
-    "What would be the most supportive way to approach this together right now?"
-  ];
-  const index = Math.abs(userMessage.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % fallbacks.length;
-  return fallbacks[index];
-}
-
-// Chat API endpoint
+// Chat API endpoint using OpenAI Responses API
 app.post('/api/kalise/chat', async (req: Request, res: Response) => {
   try {
     const { messages, currentMood, energyLevel, sleepQuality, moods, companionMode } = req.body;
@@ -153,149 +99,124 @@ app.post('/api/kalise/chat', async (req: Request, res: Response) => {
       return;
     }
 
-    // 2. Pattern Engine & Context Selector (Deterministic, strictly private)
+    if (!openAiClient) {
+      res.status(503).json({
+        error: 'AI_UNAVAILABLE',
+        message: 'OpenAI API key is not configured. Please configure OPENAI_API_KEY to use Kalise Companion.',
+      });
+      return;
+    }
+
+    // 2. Pattern Engine & Context Selector
     const detectedPatterns = analyzePatterns(moods || []);
     const relevantPatterns = selectRelevantPatterns(detectedPatterns, userText);
 
-    // 3. Call Google GenAI if client is configured
-    if (aiClient) {
-      try {
-        let modeInstruction = '';
-        if (companionMode === 'Listener') {
-          modeInstruction = '\n\nCurrent Companion Mode: Listener. Hold space, make them feel heard, do not give advice.';
-        } else if (companionMode === 'Real Talk') {
-          modeInstruction = '\n\nCurrent Companion Mode: Real Talk. Direct honesty with love, calling out patterns gently.';
-        } else {
-          modeInstruction = '\n\nCurrent Companion Mode: Supportive. Validate deeply, sit in the hard stuff, uplift without toxic positivity.';
-        }
-
-        let contextualPrompt = '';
-        if (currentMood) {
-          contextualPrompt += `[User's current logged mood: ${currentMood}] `;
-        }
-        if (energyLevel) {
-          contextualPrompt += `[User's current logged energy: ${energyLevel}] `;
-        }
-        if (sleepQuality) {
-          contextualPrompt += `[User's logged sleep quality: ${sleepQuality}] `;
-        }
-
-        if (relevantPatterns.length > 0) {
-          const patternDescriptions = relevantPatterns.map((p) => p.description).join('; ');
-          contextualPrompt += `[Observed patterns: ${patternDescriptions}] `;
-        }
-
-        const systemInstruction = contextualPrompt
-          ? `${KALISE_SYSTEM_INSTRUCTION}${modeInstruction}\n\nCurrent User Context: ${contextualPrompt}`
-          : `${KALISE_SYSTEM_INSTRUCTION}${modeInstruction}`;
-
-        // Limit active conversation history window to recent 8 turns (sliding window)
-        const recentMessages = messages.slice(-8);
-        const historyMessages = recentMessages.slice(0, -1);
-
-        let history: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = [];
-        for (const m of historyMessages) {
-          const role = m.role === 'assistant' ? 'model' : 'user';
-          const text = m.content;
-          if (!text) continue;
-          if (history.length > 0 && history[history.length - 1].role === role) {
-            history[history.length - 1].parts[0].text += `\n${text}`;
-          } else {
-            history.push({ role, parts: [{ text }] });
-          }
-        }
-        if (history.length > 0 && history[0].role === 'model') {
-          history.shift();
-        }
-
-        console.log('FINAL CONTENTS SENT TO GEMINI:', JSON.stringify({
-          model: GEMINI_MODEL,
-          history,
-          systemInstruction,
-          userText,
-        }, null, 2));
-
-        const chat = aiClient.chats.create({
-          model: GEMINI_MODEL,
-          history,
-          config: {
-            systemInstruction,
-            temperature: 0.7,
-            topP: 0.9,
-          },
-        });
-
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Gemini API timeout')), 30000)
-        );
-
-        const response = await Promise.race([
-          chat.sendMessage({ message: userText }),
-          timeoutPromise,
-        ]) as any;
-
-        const rawReply = response.text || "I'm right here with you. Let's take this one moment at a time.";
-        const reply = rawReply.replace(/—/g, ' - ');
-        res.json({ reply, isCrisis: false, model: GEMINI_MODEL });
-        return;
-      } catch (geminiError: unknown) {
-        const errStr = String(geminiError);
-        if (errStr.includes('429') || errStr.includes('RESOURCE_EXHAUSTED') || errStr.includes('quota')) {
-          console.log('Gemini API quota reached, using local resilient companion mode.');
-        } else {
-          console.error('Gemini API call failed, falling back to local companion logic:', geminiError);
-        }
-        // Fallback to local companion
-        const fallbackReply = generateLocalKaliseResponse(userText, messages);
-        res.json({ reply: fallbackReply, isCrisis: false, model: GEMINI_MODEL });
-        return;
-      }
+    let modeInstruction = '';
+    if (companionMode === 'Listener') {
+      modeInstruction = '\n\nCurrent Companion Mode: Listener. Hold space, make them feel heard, do not give advice.';
+    } else if (companionMode === 'Real Talk') {
+      modeInstruction = '\n\nCurrent Companion Mode: Real Talk. Direct honesty with love, calling out patterns gently.';
+    } else {
+      modeInstruction = '\n\nCurrent Companion Mode: Supportive. Validate deeply, sit in the hard stuff, uplift without toxic positivity.';
     }
 
-    // 4. Fallback when API key is not configured in environment
-    const fallbackReply = generateLocalKaliseResponse(userText, messages);
-    res.json({ reply: fallbackReply, isCrisis: false, model: GEMINI_MODEL });
+    let contextualPrompt = '';
+    if (currentMood) {
+      contextualPrompt += `[User's current logged mood: ${currentMood}] `;
+    }
+    if (energyLevel) {
+      contextualPrompt += `[User's current logged energy: ${energyLevel}] `;
+    }
+    if (sleepQuality) {
+      contextualPrompt += `[User's logged sleep quality: ${sleepQuality}] `;
+    }
+
+    if (relevantPatterns.length > 0) {
+      const patternDescriptions = relevantPatterns.map((p) => p.description).join('; ');
+      contextualPrompt += `[Observed patterns: ${patternDescriptions}] `;
+    }
+
+    const systemInstruction = contextualPrompt
+      ? `${KALISE_SYSTEM_INSTRUCTION}${modeInstruction}\n\nCurrent User Context: ${contextualPrompt}`
+      : `${KALISE_SYSTEM_INSTRUCTION}${modeInstruction}`;
+
+    // Limit active conversation history window to recent 8 turns (sliding window)
+    const recentMessages = messages.slice(-8);
+    const historyMessages = recentMessages.slice(0, -1);
+
+    const inputList: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+      { role: 'system', content: systemInstruction }
+    ];
+
+    for (const m of historyMessages) {
+      const role = m.role === 'assistant' ? 'assistant' : 'user';
+      if (m.content) {
+        inputList.push({ role, content: m.content });
+      }
+    }
+    inputList.push({ role: 'user', content: userText });
+
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('OpenAI API timeout')), 15000)
+    );
+
+    const response = await Promise.race([
+      openAiClient.responses.create({
+        model: OPENAI_MODEL,
+        input: inputList,
+      }),
+      timeoutPromise,
+    ]) as any;
+
+    const rawReply = response.output_text ||
+      (response.output && response.output[0] && response.output[0].content && response.output[0].content[0]?.text) ||
+      response.choices?.[0]?.message?.content ||
+      "I'm right here with you. Let's take this one moment at a time.";
+
+    const reply = rawReply.replace(/—/g, ' - ');
+    res.json({ reply, isCrisis: false, model: OPENAI_MODEL });
   } catch (error: unknown) {
-    console.error('Error handling Kalise chat request:', error);
-    res.status(500).json({
-      error: 'Unable to process conversation at this time.',
-      reply: "I'm having a brief connection pause, but I'm here. Take a gentle breath, and try sending your thought again.",
+    const errStr = error instanceof Error ? error.message : String(error);
+    console.error('Error handling Kalise chat request:', errStr);
+    res.status(503).json({
+      error: 'AI_UNAVAILABLE',
+      message: errStr.includes('timeout') ? 'The request timed out. Please retry.' : 'Unable to process conversation at this time. Please check API key and network connection.',
     });
   }
 });
 
-// Dedicated verification endpoint for testing Google Gemini connection
-app.get('/api/gemini/test', async (_req: Request, res: Response) => {
-  if (!aiClient) {
+// Dedicated verification endpoint for testing OpenAI connection
+app.get('/api/ai/test', async (_req: Request, res: Response) => {
+  if (!openAiClient) {
     res.status(200).json({
       configured: false,
-      model: GEMINI_MODEL,
-      message: 'GEMINI_API_KEY environment variable is not configured. Companion will run in local resilient mode until configured.',
+      model: OPENAI_MODEL,
+      message: 'OPENAI_API_KEY environment variable is not configured.',
     });
     return;
   }
 
   try {
-    const testResponse = await aiClient.models.generateContent({
-      model: GEMINI_MODEL,
-      contents: 'Respond with the single word: Connected',
+    const testResponse = await openAiClient.responses.create({
+      model: OPENAI_MODEL,
+      input: 'Respond with the single word: Connected',
     });
 
     res.json({
       configured: true,
       success: true,
-      model: GEMINI_MODEL,
-      reply: testResponse.text?.trim(),
-      message: 'Google Gemini API connection verified successfully.',
+      model: OPENAI_MODEL,
+      reply: (testResponse as any).output_text?.trim(),
+      message: 'OpenAI API connection verified successfully.',
     });
   } catch (err: unknown) {
     const errorMessage = err instanceof Error ? err.message : String(err);
     res.status(500).json({
       configured: true,
       success: false,
-      model: GEMINI_MODEL,
+      model: OPENAI_MODEL,
       error: errorMessage,
-      message: 'Google Gemini API call failed.',
+      message: 'OpenAI API call failed.',
     });
   }
 });

@@ -64,6 +64,8 @@ function KaliseMainApp() {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false);
   const [isChatLoading, setIsChatLoading] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
+  const [lastFailedMessage, setLastFailedMessage] = useState<{ text: string; mode: 'Supportive' | 'Listener' | 'Real Talk' } | null>(null);
 
   // Synchronize user settings and authoritative remote data when authenticated
   const loadUserDataForUser = async (user: User) => {
@@ -491,6 +493,8 @@ function KaliseMainApp() {
 
   // Chat handlers with user scoping
   const handleSendMessage = async (text: string, companionMode: 'Supportive' | 'Listener' | 'Real Talk' = 'Supportive') => {
+    setChatError(null);
+    setLastFailedMessage(null);
     const userId = session?.user?.id;
     const userMsg: ChatMessage = {
       id: 'msg-' + Date.now(),
@@ -503,19 +507,11 @@ function KaliseMainApp() {
     setChatMessages(updatedHistory);
     storageService.saveChatMessage(userMsg, userId);
 
-    if (!settings.isPremium) {
-      const newSettings = {
-        ...settings,
-        freeMessagesUsed: (settings.freeMessagesUsed || 0) + 1,
-      };
-      handleUpdateSettings(newSettings);
-    }
-
     setIsChatLoading(true);
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s frontend timeout
 
       const response = await fetch('/api/kalise/chat', {
         method: 'POST',
@@ -532,11 +528,20 @@ function KaliseMainApp() {
       });
       clearTimeout(timeoutId);
 
+      const data = await response.json();
+
       if (!response.ok) {
-        throw new Error('Chat response was not ok');
+        throw new Error(data.message || data.error || 'Chat response was not ok');
       }
 
-      const data = await response.json();
+      // Successful response: increment free messages if not premium
+      if (!settings.isPremium) {
+        const newSettings = {
+          ...settings,
+          freeMessagesUsed: (settings.freeMessagesUsed || 0) + 1,
+        };
+        handleUpdateSettings(newSettings);
+      }
 
       const assistantMsg: ChatMessage = {
         id: 'msg-' + Date.now() + 1,
@@ -555,20 +560,21 @@ function KaliseMainApp() {
         );
         setIsCrisisModalOpen(true);
       }
-    } catch (err) {
+    } catch (err: any) {
+      const errMsg = err.name === 'AbortError' ? 'The request timed out. Please check your connection and retry.' : (err.message || 'Failed to communicate with Kalise server.');
       console.error('Failed to communicate with Kalise server:', err);
-      const fallbackMsg: ChatMessage = {
-        id: 'msg-' + Date.now() + 1,
-        role: 'assistant',
-        content:
-          "I'm right here with you. It seems our connection dipped for a moment, but please know whatever you're carrying, you don't have to carry it alone. How are you holding up right now?",
-        timestamp: new Date().toISOString(),
-      };
-      setChatMessages((prev) => [...prev, fallbackMsg]);
-      storageService.saveChatMessage(fallbackMsg, userId);
+      setChatError(errMsg);
+      setLastFailedMessage({ text, mode: companionMode });
     } finally {
       setIsChatLoading(false);
     }
+  };
+
+  const handleRetryLastMessage = async () => {
+    if (!lastFailedMessage) return;
+    // Remove the last user message that failed to get a response so we don't duplicate when retrying
+    setChatMessages((prev) => prev.filter((m, i) => i !== prev.length - 1 || m.role !== 'user'));
+    await handleSendMessage(lastFailedMessage.text, lastFailedMessage.mode);
   };
 
   const handleClearChat = () => {
@@ -693,6 +699,8 @@ function KaliseMainApp() {
             settings={settings}
             latestMood={latestMood}
             isLoading={isChatLoading}
+            chatError={chatError}
+            onRetry={handleRetryLastMessage}
           />
         )}
       </main>

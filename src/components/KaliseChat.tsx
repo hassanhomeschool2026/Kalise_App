@@ -11,6 +11,8 @@ interface Props {
   settings: UserSettings;
   latestMood?: MoodEntry;
   isLoading: boolean;
+  chatError?: string | null;
+  onRetry?: () => void;
 }
 
 const STARTER_PROMPTS = [
@@ -30,6 +32,8 @@ export const KaliseChat: React.FC<Props> = ({
   settings,
   latestMood,
   isLoading,
+  chatError,
+  onRetry,
 }) => {
   const [inputText, setInputText] = useState('');
   const [companionMode, setCompanionMode] = useState<'Supportive' | 'Listener' | 'Real Talk'>('Supportive');
@@ -219,6 +223,24 @@ export const KaliseChat: React.FC<Props> = ({
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Error banner with retry if request failed */}
+      {chatError && (
+        <div className="p-3 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-200 text-xs flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+            <span>{chatError}</span>
+          </div>
+          {onRetry && (
+            <button
+              onClick={onRetry}
+              className="px-3 py-1 rounded-xl bg-rose-500 hover:bg-rose-400 text-slate-950 font-bold transition cursor-pointer shrink-0"
+            >
+              Retry
+            </button>
+          )}
         </div>
       )}
 
