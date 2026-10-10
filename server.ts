@@ -156,22 +156,33 @@ app.post('/api/kalise/chat', async (req: Request, res: Response) => {
     }
     inputList.push({ role: 'user', content: userText });
 
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('OpenAI API timeout')), 15000)
-    );
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout
 
-    const response = await Promise.race([
-      openAiClient.responses.create({
+    let response: any;
+    try {
+      // Note: Aborting the request via AbortController does not guarantee provider processing or billing has stopped.
+      response = await openAiClient.responses.create({
         model: OPENAI_MODEL,
         input: inputList,
-      }),
-      timeoutPromise,
-    ]) as any;
+      }, {
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     const rawReply = response.output_text ||
       (response.output && response.output[0] && response.output[0].content && response.output[0].content[0]?.text) ||
-      response.choices?.[0]?.message?.content ||
-      "I'm right here with you. Let's take this one moment at a time.";
+      response.choices?.[0]?.message?.content;
+
+    if (!rawReply || typeof rawReply !== 'string' || !rawReply.trim()) {
+      res.status(503).json({
+        error: 'AI_UNAVAILABLE',
+        message: 'OpenAI returned no response text.',
+      });
+      return;
+    }
 
     const reply = rawReply.replace(/—/g, ' - ');
     res.json({ reply, isCrisis: false, model: OPENAI_MODEL });

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { storageService } from './services/storage';
 import {
   MoodEntry,
@@ -491,21 +491,39 @@ function KaliseMainApp() {
     return () => clearInterval(checkInterval);
   }, [medications, medicationLogs, settings.medicationRemindersEnabled, settings.notificationPermission]);
 
+  // Synchronous in-flight guard to prevent overlapping chat submissions
+  const inFlightRef = useRef(false);
+
   // Chat handlers with user scoping
-  const handleSendMessage = async (text: string, companionMode: 'Supportive' | 'Listener' | 'Real Talk' = 'Supportive') => {
+  const handleSendMessage = async (
+    text: string,
+    companionMode: 'Supportive' | 'Listener' | 'Real Talk' = 'Supportive',
+    isRetry = false
+  ) => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     setChatError(null);
     setLastFailedMessage(null);
     const userId = session?.user?.id;
-    const userMsg: ChatMessage = {
-      id: 'msg-' + Date.now(),
-      role: 'user',
-      content: text,
-      timestamp: new Date().toISOString(),
-    };
 
-    const updatedHistory = [...chatMessages, userMsg];
-    setChatMessages(updatedHistory);
-    storageService.saveChatMessage(userMsg, userId);
+    let userMsg: ChatMessage;
+    let updatedHistory: ChatMessage[];
+
+    if (isRetry) {
+      // Reuse existing last user message in chatMessages without appending a second copy
+      userMsg = chatMessages[chatMessages.length - 1];
+      updatedHistory = chatMessages;
+    } else {
+      userMsg = {
+        id: 'msg-' + Date.now(),
+        role: 'user',
+        content: text,
+        timestamp: new Date().toISOString(),
+      };
+      updatedHistory = [...chatMessages, userMsg];
+      setChatMessages(updatedHistory);
+      storageService.saveChatMessage(userMsg, userId);
+    }
 
     setIsChatLoading(true);
 
@@ -567,14 +585,13 @@ function KaliseMainApp() {
       setLastFailedMessage({ text, mode: companionMode });
     } finally {
       setIsChatLoading(false);
+      inFlightRef.current = false;
     }
   };
 
   const handleRetryLastMessage = async () => {
-    if (!lastFailedMessage) return;
-    // Remove the last user message that failed to get a response so we don't duplicate when retrying
-    setChatMessages((prev) => prev.filter((m, i) => i !== prev.length - 1 || m.role !== 'user'));
-    await handleSendMessage(lastFailedMessage.text, lastFailedMessage.mode);
+    if (!lastFailedMessage || inFlightRef.current) return;
+    await handleSendMessage(lastFailedMessage.text, lastFailedMessage.mode, true);
   };
 
   const handleClearChat = () => {
