@@ -4,7 +4,7 @@ import { ChatMessage, MoodEntry, UserSettings } from '../types';
 
 interface Props {
   messages: ChatMessage[];
-  onSendMessage: (text: string) => Promise<void>;
+  onSendMessage: (text: string, mode: 'Supportive' | 'Listener' | 'Real Talk') => Promise<void>;
   onClearChat: () => void;
   onOpenCrisis: (reason?: string) => void;
   onOpenPremium: () => void;
@@ -32,6 +32,7 @@ export const KaliseChat: React.FC<Props> = ({
   isLoading,
 }) => {
   const [inputText, setInputText] = useState('');
+  const [companionMode, setCompanionMode] = useState<'Supportive' | 'Listener' | 'Real Talk'>('Supportive');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const isFreeLimitReached = !settings.isPremium && settings.freeMessagesUsed >= 3;
@@ -51,7 +52,7 @@ export const KaliseChat: React.FC<Props> = ({
     }
 
     setInputText('');
-    await onSendMessage(text);
+    await onSendMessage(text, companionMode);
   };
 
   const handlePickStarter = async (starter: string) => {
@@ -60,7 +61,7 @@ export const KaliseChat: React.FC<Props> = ({
       onOpenPremium();
       return;
     }
-    await onSendMessage(starter);
+    await onSendMessage(starter, companionMode);
   };
 
   return (
@@ -102,6 +103,26 @@ export const KaliseChat: React.FC<Props> = ({
             <RefreshCw className="w-4 h-4" />
           </button>
         </div>
+      </div>
+
+      {/* Companion Mode Selector */}
+      <div className="mb-2.5 p-1 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-between text-xs">
+        {(['Supportive', 'Listener', 'Real Talk'] as const).map((mode) => {
+          const isActive = companionMode === mode;
+          return (
+            <button
+              key={mode}
+              onClick={() => setCompanionMode(mode)}
+              className={`flex-1 py-1.5 px-2 rounded-xl font-medium transition cursor-pointer text-center ${
+                isActive
+                  ? 'bg-teal-500/20 text-teal-300 border border-teal-500/30 shadow-xs'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+              }`}
+            >
+              {mode}
+            </button>
+          );
+        })}
       </div>
 
       {/* Free trial messages reminder */}

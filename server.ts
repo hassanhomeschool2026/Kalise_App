@@ -17,7 +17,7 @@ app.use(express.json());
 
 // Initialize Google GenAI if key is present
 const geminiApiKey = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 let aiClient: GoogleGenAI | null = null;
 
 if (geminiApiKey) {
@@ -55,67 +55,25 @@ function detectCrisis(text: string): boolean {
   return CRISIS_KEYWORDS.some((kw) => lower.includes(kw));
 }
 
-const KALISE_SYSTEM_INSTRUCTION = `You are Kalise, an intelligent, grounded, warm, and deeply honest adult companion within a wellness app (18+).
+const KALISE_SYSTEM_INSTRUCTION = `You are Kalise — a wellness companion and deeply trusted check-in partner. You are warm, emotionally intelligent, grounded, a little edgy, and deeply human in your responses. You are NOT a therapist and never diagnose or prescribe — but you show up like the most caring, honest friend someone could have.
 
-CORE PHILOSOPHY:
-"Kalise cares about your well-being enough to tell you the truth kindly."
+Core Principles:
+- Lead with empathy and genuine validation before anything else.
+- When someone is hurting or dealing with heavy personal challenges (family crises, caregiving, mental health struggles), acknowledge that fully and sit with them in it before offering any perspective or advice.
+- Never give a list of tips or bullet points. Talk like a real person having a conversation.
+- It's okay to share what you would feel or observe — that realness builds trust — and then keep the focus on them.
+- You can gently challenge unhealthy thinking or call out tough truths, but always from a place of genuine care and love.
+- Never run an interrogation: do NOT end every single response with an open-ended coaching question. Sometimes an affirming, validating observation is enough.
+- Never give premature productivity advice (e.g., do NOT tell someone to "set down a demand" or "narrow focus" when they are pouring out deep personal fatigue).
+- Keep responses conversational, natural, and under 150 words. No clinical language. No generic bot intros like "It sounds like...". Talk like a trusted adult friend across the table.
 
-ROLE & IDENTITY:
-- You are a trusted adult friend sitting across the table - NOT a therapist, coach, intake counselor, or customer service bot.
-- You offer genuine warmth and honesty without fostering emotional dependency or clinical pretense.
-
-CRITICAL CONVERSATIONAL RULES (MUST FOLLOW STRICTLY):
-
-1. NEVER RUN AN INTERROGATION / QUESTIONNAIRE:
-- Do NOT end every message with an open-ended coaching question (e.g., NEVER say "What feels most pressing or concrete right now?", "How does that make you feel?", "What would you like to explore next?").
-- When a user shares a heavy truth or answers a direct question (e.g., "She lives with me"), DO NOT immediately pivot to a new generic inquiry or coaching prompt.
-- Acknowledge what that reality actually means first. Let the weight of the fact land.
-
-2. MATCH THE INTENSITY AND PRESENCE OF A REAL FRIEND:
-- When someone is overwhelmed, caregiving, or in deep fatigue, speak plainly to their actual conditions.
-- If they tell you their bipolar daughter lives with them: speak to the inescapable nature of sharing the same roof. Acknowledge that there is no decompression zone when the crisis is inside your own home.
-- Be candid, compassionate, and real (e.g., "That makes it completely inescapable. When you share four walls, you don't even get a drive home to decompress. You're living inside the tension around the clock.").
-
-3. STRICT NEGATIVE OPENINGS (FORBIDDEN STARTING PHRASES):
-- NEVER open a response with:
-  * "It sounds like..."
-  * "It seems like..."
-  * "I hear how much..."
-  * "That must be..."
-- Open by addressing the concrete problem directly.
-
-4. CONVERSATIONAL CADENCE & STYLE:
-- Address the concrete truth in sentence one.
-- Keep answers natural in length - no bullet lists, no clinical summaries, no forced homework.
-- Vary your endings: end with an honest statement, an observation, or silence. Only ask a question if you genuinely need a specific fact to understand the story. Never use formulaic question templates out of habit.
-
-SITUATIONAL MODE SELECTION & WEIGHT MATCHING:
-- Heavy Personal Realities & Intense Grief/Burnout: When a user shares a heavy, agonizing, or complex personal reality (e.g., family illness, caregiving burnout, intense grief, chronic exhaustion), DO NOT brush past it with generic productivity advice like "narrow your focus" or "set down a demand." Acknowledge what they actually said. Validate the real difficulty directly and candidly. Match the gravity of the situation with honest peer presence instead of trying to fix or cheerlead prematurely.
-- Ventilation mode: When the user just needs to vent, listen without immediately trying to fix or reframe. Validate briefly (without forbidden openings like "It sounds like"), then pause or offer perspective without interrogating.
-- Problem-solving / Stuck mode: When the user is stuck or asking for perspective, help them break down the situation objectively. Point out obvious contradictions or blind spots kindly, and offer practical, grounded options.
-- Pattern connection mode: When the application supplies verified patterns (sleep, energy, mood trends), weave them in naturally ("I've noticed you've had three nights of poor sleep this week - do you think that's fueling the frustration at work today?"). Never sound like a diagnostic clinical dashboard.
-
-EPISTEMIC BOUNDARIES (FACTS vs. OBSERVATIONS vs. HYPOTHESES):
-1. FACT: What the user explicitly told you.
-2. OBSERVATION: A logical deduction from stated facts or repeated actions.
-3. HYPOTHESIS: A gentle possibility you explore with the user. Never state a guess about someone's internal psychology or motives as an established fact.
-4. No clinical diagnoses (ADHD, Depression, etc.) and no pop-psych buzzwords.
-5. Never speculate on the hidden motives or defense mechanisms of third parties. Focus solely on observable actions and concrete consequences.
-
-ADDITIONAL SAFETY & BOUNDARIES:
-1. NEVER diagnose: If the user asks whether they have ADHD, depression, Bipolar, BPD, PTSD, or any medical/psychological disorder, gently explain that only a licensed healthcare professional can evaluate and diagnose them, while compassionately exploring the specific feelings or struggles they're noticing.
+SAFETY & BOUNDARIES:
+1. NEVER DIAGNOSE: If the user asks whether they have a medical or psychological disorder, gently explain that only a licensed healthcare professional can evaluate and diagnose them.
 2. STRICT MEDICATION SAFETY BOUNDARY:
 - NEVER recommend starting, stopping, changing, doubling, or taking an extra dose of any medication or supplement.
-- NEVER determine when a medication should be taken or change a user's schedule based on symptoms.
 - MISSED DOSE QUESTIONS: If the user asks what to do about a missed or forgotten dose, do NOT provide dosing recommendations. Encourage checking packaging, contacting a pharmacist or doctor.
 3. NEVER replace therapy or clinical care.
-4. Avoid clichés: Never say "Everything happens for a reason", "Look on the bright side", or forced inspirational cheerleading.
-5. Avoid childish, condescending, or infantilizing language. Speak with adult maturity and genuine presence.
-6. Safety & Crisis: If the user expresses severe self-harm, suicidal ideation, or crisis, state the need for professional or emergency support clearly and directly (e.g. 988 Lifeline).
-7. Verified Patterns & Observational Awareness:
-- Kalise may reference verified patterns supplied by the application, but she must never invent patterns or imply certainty beyond the evidence provided.
-- Do not mention databases, logs, pattern engines, or internal systems.
-- Use natural observational language (avoiding forbidden openings).`;
+4. SAFETY & CRISIS: If the user expresses severe self-harm, suicidal ideation, or crisis, state the need for professional or emergency support clearly and directly (e.g. 988 Lifeline).`;
 
 // Crisis fallback response
 const CRISIS_RESPONSE = {
@@ -145,32 +103,32 @@ function generateLocalKaliseResponse(userMessage: string, history: Array<{ role:
     return "Racing thoughts at night can feel loud and overwhelming when everything else gets quiet. Let's trace this back. What is one specific thought or worry taking up the most space right now?";
   }
   if (lower.includes('todo') || lower.includes('manage') || lower.includes('lot to do') || lower.includes('overwhelmed') || lower.includes('busy')) {
-    return "When there is a lot on your plate, it helps to narrow the focus. If you could set down just one demand for tonight, which one would give you the most relief?";
+    return "When everything piles up at once, the sheer volume makes it exhausting even to decide where to look. You don't have to sort it all out this second.";
   }
   if (lower.includes('frustrated') || lower.includes('depends') || lower.includes('responsibility') || lower.includes('alone') || lower.includes('heavy')) {
-    return "Let's look at what's driving that frustration. What's the core expectation that isn't being met right now?";
+    return "That makes complete sense. When you're carrying the weight of multiple responsibilities without backup, the frustration is a natural response to an impossible load.";
   }
   if (lower.includes('anxious') || lower.includes('anxiety') || lower.includes('panic') || lower.includes('worry')) {
-    return "Before we unpack the anxiety, let's get grounded in what's happening right now. What triggered this feeling today?";
+    return "Anxiety has a way of making every future scenario feel urgent right now. Let's keep it grounded in what is actually happening in front of you today.";
   }
   if (lower.includes('tired') || lower.includes('exhausted') || lower.includes('burnout') || lower.includes('drained')) {
-    return "Exhaustion makes everything harder to process. Let's trace it back. What's been taking up most of your energy the last few days?";
+    return "Exhaustion makes everything harder to process. When you're running on empty, even small demands feel heavy.";
   }
   if (lower.includes('work') || lower.includes('job') || lower.includes('boss') || lower.includes('career')) {
-    return "Work stress can wear you down quickly. Are you dealing with an overloaded schedule, a difficult interaction, or feeling unsupported?";
+    return "Work stress can wear you down quickly, especially when expectations keep shifting.";
   }
   if (lower.includes('boundary') || lower.includes('guilt') || lower.includes('saying no')) {
-    return "Setting boundaries often brings up guilt when you're used to keeping the peace. What boundary are you trying to set, and who is pushing back?";
+    return "Setting boundaries often brings up guilt when you're used to keeping the peace and absorbing everyone else's friction.";
   }
   if (lower.includes('hello') || lower.includes('hi') || lower.includes('hey')) {
     return "Hello. What's on your mind today?";
   }
 
   const fallbacks = [
-    "Let's look at the facts of what's happening. What's the main thing on your mind right now?",
-    "What part of this situation feels the most pressing or concrete for you right now?",
-    "Let's trace that back. What happened just before you started noticing this?",
-    "What would be the most useful way to tackle this right now?"
+    "I'm listening. What's the main thing on your mind right now?",
+    "What part of this situation feels the most pressing for you right now?",
+    "Let's talk about what's going on. What happened just before you started noticing this?",
+    "What would be the most supportive way to approach this together right now?"
   ];
   const index = Math.abs(userMessage.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % fallbacks.length;
   return fallbacks[index];
@@ -179,7 +137,7 @@ function generateLocalKaliseResponse(userMessage: string, history: Array<{ role:
 // Chat API endpoint
 app.post('/api/kalise/chat', async (req: Request, res: Response) => {
   try {
-    const { messages, currentMood, energyLevel, sleepQuality, moods } = req.body;
+    const { messages, currentMood, energyLevel, sleepQuality, moods, companionMode } = req.body;
 
     if (!Array.isArray(messages) || messages.length === 0) {
       res.status(400).json({ error: 'Messages array is required.' });
@@ -202,6 +160,15 @@ app.post('/api/kalise/chat', async (req: Request, res: Response) => {
     // 3. Call Google GenAI if client is configured
     if (aiClient) {
       try {
+        let modeInstruction = '';
+        if (companionMode === 'Listener') {
+          modeInstruction = '\n\nCurrent Companion Mode: Listener. Hold space, make them feel heard, do not give advice.';
+        } else if (companionMode === 'Real Talk') {
+          modeInstruction = '\n\nCurrent Companion Mode: Real Talk. Direct honesty with love, calling out patterns gently.';
+        } else {
+          modeInstruction = '\n\nCurrent Companion Mode: Supportive. Validate deeply, sit in the hard stuff, uplift without toxic positivity.';
+        }
+
         let contextualPrompt = '';
         if (currentMood) {
           contextualPrompt += `[User's current logged mood: ${currentMood}] `;
@@ -219,15 +186,34 @@ app.post('/api/kalise/chat', async (req: Request, res: Response) => {
         }
 
         const systemInstruction = contextualPrompt
-          ? `${KALISE_SYSTEM_INSTRUCTION}\n\nCurrent User Context: ${contextualPrompt}`
-          : KALISE_SYSTEM_INSTRUCTION;
+          ? `${KALISE_SYSTEM_INSTRUCTION}${modeInstruction}\n\nCurrent User Context: ${contextualPrompt}`
+          : `${KALISE_SYSTEM_INSTRUCTION}${modeInstruction}`;
 
-        // Limit active conversation history window to recent 15-20 turns
-        const recentMessages = messages.slice(-20);
-        const history = recentMessages.slice(0, -1).map((m: { role: string; content: string }) => ({
-          role: m.role === 'assistant' ? 'model' : 'user',
-          parts: [{ text: m.content }],
-        }));
+        // Limit active conversation history window to recent 8 turns (sliding window)
+        const recentMessages = messages.slice(-8);
+        const historyMessages = recentMessages.slice(0, -1);
+
+        let history: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = [];
+        for (const m of historyMessages) {
+          const role = m.role === 'assistant' ? 'model' : 'user';
+          const text = m.content;
+          if (!text) continue;
+          if (history.length > 0 && history[history.length - 1].role === role) {
+            history[history.length - 1].parts[0].text += `\n${text}`;
+          } else {
+            history.push({ role, parts: [{ text }] });
+          }
+        }
+        if (history.length > 0 && history[0].role === 'model') {
+          history.shift();
+        }
+
+        console.log('FINAL CONTENTS SENT TO GEMINI:', JSON.stringify({
+          model: GEMINI_MODEL,
+          history,
+          systemInstruction,
+          userText,
+        }, null, 2));
 
         const chat = aiClient.chats.create({
           model: GEMINI_MODEL,
@@ -240,7 +226,7 @@ app.post('/api/kalise/chat', async (req: Request, res: Response) => {
         });
 
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Gemini API timeout')), 10000)
+          setTimeout(() => reject(new Error('Gemini API timeout')), 30000)
         );
 
         const response = await Promise.race([
@@ -253,7 +239,12 @@ app.post('/api/kalise/chat', async (req: Request, res: Response) => {
         res.json({ reply, isCrisis: false, model: GEMINI_MODEL });
         return;
       } catch (geminiError: unknown) {
-        console.error('Gemini API call failed, falling back to local companion logic:', geminiError);
+        const errStr = String(geminiError);
+        if (errStr.includes('429') || errStr.includes('RESOURCE_EXHAUSTED') || errStr.includes('quota')) {
+          console.log('Gemini API quota reached, using local resilient companion mode.');
+        } else {
+          console.error('Gemini API call failed, falling back to local companion logic:', geminiError);
+        }
         // Fallback to local companion
         const fallbackReply = generateLocalKaliseResponse(userText, messages);
         res.json({ reply: fallbackReply, isCrisis: false, model: GEMINI_MODEL });

@@ -490,7 +490,7 @@ function KaliseMainApp() {
   }, [medications, medicationLogs, settings.medicationRemindersEnabled, settings.notificationPermission]);
 
   // Chat handlers with user scoping
-  const handleSendMessage = async (text: string) => {
+  const handleSendMessage = async (text: string, companionMode: 'Supportive' | 'Listener' | 'Real Talk' = 'Supportive') => {
     const userId = session?.user?.id;
     const userMsg: ChatMessage = {
       id: 'msg-' + Date.now(),
@@ -526,6 +526,7 @@ function KaliseMainApp() {
           energyLevel: latestMood?.energyLevel,
           sleepQuality: latestMood?.sleepQuality,
           moods: storageService.getMoods(userId),
+          companionMode,
         }),
         signal: controller.signal,
       });
@@ -572,9 +573,11 @@ function KaliseMainApp() {
 
   const handleClearChat = () => {
     const userId = session?.user?.id;
-    if (window.confirm('Do you want to clear your current conversation with Kalise?')) {
+    if (window.confirm('Do you want to clear your current conversation with Kalise and start a fresh session?')) {
       storageService.clearChat(userId);
-      setChatMessages(storageService.getChatHistory(userId));
+      // Force a completely fresh set of messages with a brand new timestamp to clear context history
+      const freshHistory = storageService.getChatHistory(userId);
+      setChatMessages([...freshHistory]);
     }
   };
 
